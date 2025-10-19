@@ -1,0 +1,9 @@
+scheduler: round_robin
+network:
+  control_plane_iface: eth0
+  data_plane_iface: ib0
+worker_heartbeat_timeout: 45.0
+redis:
+  host: localhost
+  port: 6379
+  db: 0
