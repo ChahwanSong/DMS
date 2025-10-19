@@ -1,0 +1,65 @@
+syntax = "proto3";
+package dms;
+
+message SyncRequest {
+  string request_id = 1;
+  string source_path = 2;
+  string dest_path = 3;
+  string transfer_mode = 4;
+  uint64 chunk_size = 5;
+}
+
+message SyncResponse {
+  bool accepted = 1;
+  string detail = 2;
+}
+
+message StatusRequest {
+  string request_id = 1;
+}
+
+message ProgressUpdate {
+  string request_id = 1;
+  string agent_id = 2;
+  uint64 bytes_transferred = 3;
+  uint64 total_bytes = 4;
+  string state = 5;
+  string detail = 6;
+  int64 timestamp_ms = 7;
+}
+
+message StatusResponse {
+  repeated ProgressUpdate updates = 1;
+}
+
+message ChunkInfo {
+  string relative_path = 1;
+  uint64 offset = 2;
+  uint64 length = 3;
+  string peer_host = 4;
+  uint32 peer_port = 5;
+}
+
+message AgentTask {
+  string request_id = 1;
+  string agent_id = 2;
+  string source_root = 3;
+  string dest_root = 4;
+  string transfer_mode = 5;
+  repeated ChunkInfo chunks = 6;
+  uint64 total_bytes = 7;
+}
+
+message Ack {
+  bool ok = 1;
+  string detail = 2;
+}
+
+service MasterService {
+  rpc SubmitSync (SyncRequest) returns (SyncResponse);
+  rpc GetStatus (StatusRequest) returns (StatusResponse);
+}
+
+service AgentService {
+  rpc ExecuteTask (AgentTask) returns (stream ProgressUpdate);
+}
