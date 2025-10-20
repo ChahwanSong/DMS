@@ -114,64 +114,32 @@ network:
       address: 192.168.100.11
 ```
 
-To start a basic asyncio worker that only acknowledges assignments you can run:
+Start the bundled asyncio worker process from the `control_plane` directory. The CLI loads
+the YAML, binds the HTTP client to the configured control-plane address, and periodically
+advertises every data-plane endpoint via heartbeats:
 
-```python
-import asyncio
-from control_plane.dms_agent import (
-    AgentClient,
-    AgentConfig,
-    load_agent_config,
-    run_agent,
-)
-from control_plane.dms_master.models import (
-    DataPlaneEndpoint,
-    WorkerHeartbeat,
-    WorkerStatus,
-    SyncResult,
-)
-
-config = load_agent_config("example_agent.yml")
-
-client = AgentClient(
-    config.master_url,
-    worker_id=config.worker_id,
-    control_plane_bind=config.network.control_plane_address,
-)
-
-
-def heartbeat_factory():
-    return WorkerHeartbeat(
-        worker_id=config.worker_id,
-        status=WorkerStatus.IDLE,
-        free_bytes=10**12,
-        control_plane_iface=config.network.control_plane_iface,
-        control_plane_address=config.network.control_plane_address,
-        data_plane_endpoints=[
-            DataPlaneEndpoint(iface=ep.iface, address=ep.address)
-            for ep in config.network.data_plane_endpoints
-        ],
-    )
-
-
-async def assignment_handler(assignment):
-    # Integrate with the C++ data plane here. For now we only acknowledge success.
-    return SyncResult(
-        request_id=assignment.request_id,
-        worker_id=config.worker_id,
-        success=True,
-        data_plane_iface=assignment.data_plane_iface,
-    )
-
-asyncio.run(run_agent(client, heartbeat_factory, assignment_handler))
+```bash
+export PYTHONPATH=$(pwd)
+python agent_cli.py --config example_agent.yml --free-bytes 1099511627776
 ```
+
+Key options:
+
+- `--heartbeat-interval`: seconds between heartbeat messages (default: `5.0`).
+- `--free-bytes`: total free capacity advertised in heartbeats. Adjust to reflect the local
+  filesystem.
+- `--log-level`: control the verbosity of the agent (`INFO` by default).
+
+The stock handler only acknowledges assignments. Replace the placeholder transfer hook in
+`control_plane/agent_cli.py` with a wrapper around the C++ data plane to perform real data
+movement.
 
 ### Submitting a test sync request
 
 ```bash
 curl -X POST http://127.0.0.1:8000/sync \
   -H 'Content-Type: application/json' \
-  -d '{
+ -d '{
         "request_id": "demo-1",
         "source_path": "/home/clusterA/demo",
         "destination_path": "/home/clusterB",
@@ -194,8 +162,9 @@ ctest --test-dir build --output-on-failure
 
 1. Launch Redis locally (`sudo systemctl start redis-server`).
 2. Start the master server with `python master_cli.py --config example_master.yml`.
-3. In a second shell, start an agent using the sample script above. The agent will bind its
-   control-plane client to the configured address and advertise the interfaces in heartbeats.
+3. In a second shell, start an agent with `python agent_cli.py --config example_agent.yml`.
+   The agent binds its control-plane client to the configured address and advertises every
+   data-plane interface in heartbeats.
 4. Submit a sync request with `curl` as shown earlier and observe the logs from both the master
    and the agent.
 5. Use the C++ `TransferManager` in standalone mode to exercise the data-plane logic with the
