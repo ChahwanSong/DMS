@@ -18,7 +18,7 @@ struct ChunkPayload {
     std::filesystem::path path;
     std::uint64_t offset;
     std::vector<char> data;
-    std::string checksum_hex;
+    std::string file_checksum_hex;
 };
 
 class NetworkTransport {

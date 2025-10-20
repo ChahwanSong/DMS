@@ -54,15 +54,20 @@ void TransferManager::worker_thread() {
         }
         auto files = FileChunker::enumerate_files(job.source);
         for (const auto &file : files) {
+            auto checksum = compute_file_checksum(file);
+            if (!checksum) {
+                continue;
+            }
             auto chunks = chunker_.chunk_file(file);
             for (const auto &chunk : chunks) {
-                process_chunk(chunk, job.destination);
+                process_chunk(chunk, job.destination, *checksum);
             }
         }
     }
 }
 
-void TransferManager::process_chunk(const FileChunk &chunk, const NetworkEndpoint &endpoint) {
+void TransferManager::process_chunk(const FileChunk &chunk, const NetworkEndpoint &endpoint,
+                                    const std::string &file_checksum) {
     std::ifstream file(chunk.path, std::ios::binary);
     if (!file) {
         std::cerr << "Failed to open file: " << chunk.path << std::endl;
@@ -72,9 +77,33 @@ void TransferManager::process_chunk(const FileChunk &chunk, const NetworkEndpoin
     std::vector<char> buffer(chunk.size);
     file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
     buffer.resize(static_cast<std::size_t>(file.gcount()));
-    auto checksum = Checksum::crc32_hex(buffer);
-    ChunkPayload payload{chunk.path, chunk.offset, std::move(buffer), std::move(checksum)};
+    ChunkPayload payload{chunk.path, chunk.offset, std::move(buffer), file_checksum};
     transport_.send_chunk(endpoint, std::move(payload));
+}
+
+std::optional<std::string> TransferManager::compute_file_checksum(const std::filesystem::path &path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        std::cerr << "Failed to open file for checksum: " << path << std::endl;
+        return std::nullopt;
+    }
+    Checksum::Crc32Accumulator accumulator;
+    std::size_t buffer_size = chunker_.chunk_size_bytes();
+    if (buffer_size == 0) {
+        buffer_size = 4096;
+    } else if (buffer_size > (1u << 20)) {
+        buffer_size = 1u << 20;
+    }
+    std::vector<char> buffer(buffer_size);
+    while (file) {
+        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        auto read = file.gcount();
+        if (read <= 0) {
+            break;
+        }
+        accumulator.update(buffer.data(), static_cast<std::size_t>(read));
+    }
+    return accumulator.hex();
 }
 
 } // namespace dms

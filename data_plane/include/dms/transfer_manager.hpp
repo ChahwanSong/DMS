@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
@@ -28,7 +29,9 @@ class TransferManager {
 
   private:
     void worker_thread();
-    void process_chunk(const FileChunk &chunk, const NetworkEndpoint &endpoint);
+    void process_chunk(const FileChunk &chunk, const NetworkEndpoint &endpoint,
+                       const std::string &file_checksum);
+    std::optional<std::string> compute_file_checksum(const std::filesystem::path &path);
 
     FileChunker chunker_;
     std::size_t concurrency_;

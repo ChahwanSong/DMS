@@ -46,4 +46,6 @@ std::vector<std::filesystem::path> FileChunker::enumerate_files(const std::files
     return files;
 }
 
+std::size_t FileChunker::chunk_size_bytes() const noexcept { return chunk_size_bytes_; }
+
 } // namespace dms

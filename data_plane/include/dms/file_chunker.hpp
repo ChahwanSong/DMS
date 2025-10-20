@@ -22,6 +22,8 @@ class FileChunker {
 
     static std::vector<std::filesystem::path> enumerate_files(const std::filesystem::path &root);
 
+    std::size_t chunk_size_bytes() const noexcept;
+
   private:
     std::size_t chunk_size_bytes_;
 };

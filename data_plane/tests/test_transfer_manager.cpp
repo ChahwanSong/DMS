@@ -4,6 +4,7 @@
 #include <cassert>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <mutex>
 #include <vector>
 
@@ -49,9 +50,14 @@ int main() {
     manager.wait_for_completion();
     assert(transport.chunks() > 0);
     assert(transport.total_bytes() == 4096);
+    std::vector<char> full_file;
+    {
+        std::ifstream file(file_path, std::ios::binary);
+        full_file.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+    auto expected_file_checksum = dms::Checksum::crc32_hex(full_file);
     for (const auto &payload : transport.payloads()) {
-        auto expected = dms::Checksum::crc32_hex(payload.data);
-        assert(expected == payload.checksum_hex);
+        assert(expected_file_checksum == payload.file_checksum_hex);
     }
     fs::remove_all(temp_dir);
     return 0;
