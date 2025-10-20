@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(dms STATIC
+    src/checksum.cpp
     src/file_chunker.cpp
     src/network.cpp
     src/transfer_manager.cpp
@@ -20,5 +21,9 @@ target_link_libraries(test_file_chunker PRIVATE dms)
 add_executable(test_transfer_manager tests/test_transfer_manager.cpp)
 target_link_libraries(test_transfer_manager PRIVATE dms)
 
+add_executable(test_checksum tests/test_checksum.cpp)
+target_link_libraries(test_checksum PRIVATE dms)
+
 add_test(NAME test_file_chunker COMMAND test_file_chunker)
 add_test(NAME test_transfer_manager COMMAND test_transfer_manager)
+add_test(NAME test_checksum COMMAND test_checksum)

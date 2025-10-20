@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -13,16 +14,23 @@ struct NetworkEndpoint {
     std::string interface_name;
 };
 
+struct ChunkPayload {
+    std::filesystem::path path;
+    std::uint64_t offset;
+    std::vector<char> data;
+    std::string checksum_hex;
+};
+
 class NetworkTransport {
   public:
     virtual ~NetworkTransport() = default;
 
-    virtual void send_chunk(const NetworkEndpoint &endpoint, const std::vector<char> &buffer) = 0;
+    virtual void send_chunk(const NetworkEndpoint &endpoint, ChunkPayload payload) = 0;
 };
 
 class TcpTransport : public NetworkTransport {
   public:
-    void send_chunk(const NetworkEndpoint &endpoint, const std::vector<char> &buffer) override;
+    void send_chunk(const NetworkEndpoint &endpoint, ChunkPayload payload) override;
 };
 
 } // namespace dms

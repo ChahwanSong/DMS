@@ -49,6 +49,8 @@ with minimal memory overhead:
   parallel transfer.
 - `TransferManager` maintains a worker thread pool, converts transfer jobs into chunks, and
   streams data through an injectable `NetworkTransport` interface.
+- Every chunk carries a CRC32 checksum via the transport layer so receivers can validate
+  integrity after the transfer completes.
 - `TcpTransport` implements a baseline TCP sender and can be replaced with future RDMA
   transports (e.g., RoCEv2) by implementing the same interface.
 

@@ -1,5 +1,7 @@
 #include "dms/transfer_manager.hpp"
 
+#include "dms/checksum.hpp"
+
 #include <fstream>
 #include <iostream>
 
@@ -70,7 +72,9 @@ void TransferManager::process_chunk(const FileChunk &chunk, const NetworkEndpoin
     std::vector<char> buffer(chunk.size);
     file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
     buffer.resize(static_cast<std::size_t>(file.gcount()));
-    transport_.send_chunk(endpoint, buffer);
+    auto checksum = Checksum::crc32_hex(buffer);
+    ChunkPayload payload{chunk.path, chunk.offset, std::move(buffer), std::move(checksum)};
+    transport_.send_chunk(endpoint, std::move(payload));
 }
 
 } // namespace dms
