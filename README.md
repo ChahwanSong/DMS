@@ -63,13 +63,11 @@ Unit tests validate the chunking logic and concurrent transfer manager behaviour
 - **Redis (mandatory):** Redis backs all metadata in the master. Install it with your
   distribution package manager (`sudo apt install redis-server`) or refer to the official
   Redis documentation. Ensure the service is running before starting the DMS master.
+  Check redis-server is running or not (`redis-cli ping` should return `PONG`).
 
 ## Python environment setup
 
 ```bash
-cd control_plane
-python3.12 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
@@ -78,7 +76,7 @@ pip install -r requirements-dev.txt
 ```bash
 # Ensure the virtual environment is active
 export PYTHONPATH=$(pwd)
-python master_cli.py --config example_master.yml --host 127.0.0.1 --port 8000
+python master_cli.py --config example_master.yml --host 127.0.0.1 --port 8888
 ```
 
 Example master configuration (`example_master.yml`):
@@ -102,7 +100,7 @@ traffic to `eth0` and advertises two InfiniBand adapters for the data plane. The
 load balance assignments across the advertised interfaces:
 
 ```yaml
-master_url: http://127.0.0.1:8000
+master_url: http://127.0.0.1:8888
 worker_id: worker-a
 network:
   control_plane_iface: eth0
@@ -120,14 +118,12 @@ advertises every data-plane endpoint via heartbeats:
 
 ```bash
 export PYTHONPATH=$(pwd)
-python agent_cli.py --config example_agent.yml --free-bytes 1099511627776
+python agent_cli.py --config example_agent.yml
 ```
 
 Key options:
 
 - `--heartbeat-interval`: seconds between heartbeat messages (default: `5.0`).
-- `--free-bytes`: total free capacity advertised in heartbeats. Adjust to reflect the local
-  filesystem.
 - `--log-level`: control the verbosity of the agent (`INFO` by default).
 
 The stock handler only acknowledges assignments. Replace the placeholder transfer hook in
@@ -137,7 +133,7 @@ movement.
 ### Submitting a test sync request
 
 ```bash
-curl -X POST http://127.0.0.1:8000/sync \
+curl -X POST http://127.0.0.1:8888/sync \
   -H 'Content-Type: application/json' \
  -d '{
         "request_id": "demo-1",
@@ -187,9 +183,8 @@ ctest --test-dir build --output-on-failure
 ## Running automated tests
 
 ```bash
-# Python control plane tests
-cd control_plane
-PYTHONPATH=$(pwd) pytest
+# Python control plane tests (run from repository root so imports resolve)
+PYTHONPATH=$(pwd) pytest control_plane
 
 # C++ data plane tests
 cd ../data_plane

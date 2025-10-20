@@ -1,0 +1,4 @@
+test_file_chunker 1 0.00548246
+test_transfer_manager 1 0.00334837
+test_checksum 1 0.00215196
+---

@@ -27,7 +27,7 @@ def _make_config() -> AgentConfig:
 def test_heartbeat_factory_tracks_status() -> None:
     config = _make_config()
     tracker = agent_cli.AgentStatusTracker()
-    factory = agent_cli.build_heartbeat_factory(config, tracker, free_bytes=1234)
+    factory = agent_cli.build_heartbeat_factory(config, tracker)
 
     hb = factory()
     assert hb.status == WorkerStatus.IDLE

@@ -1,0 +1,7 @@
+/workspace/DMS/data_plane/build/CMakeFiles/dms.dir
+/workspace/DMS/data_plane/build/CMakeFiles/test_file_chunker.dir
+/workspace/DMS/data_plane/build/CMakeFiles/test_transfer_manager.dir
+/workspace/DMS/data_plane/build/CMakeFiles/test_checksum.dir
+/workspace/DMS/data_plane/build/CMakeFiles/test.dir
+/workspace/DMS/data_plane/build/CMakeFiles/edit_cache.dir
+/workspace/DMS/data_plane/build/CMakeFiles/rebuild_cache.dir

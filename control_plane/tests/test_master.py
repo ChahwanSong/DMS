@@ -49,7 +49,6 @@ def test_submit_and_assignments():
             WorkerHeartbeat(
                 worker_id="worker-1",
                 status=WorkerStatus.IDLE,
-                free_bytes=10**9,
                 data_plane_endpoints=[
                     DataPlaneEndpoint(iface="ib0", address="192.168.1.10"),
                     DataPlaneEndpoint(iface="ib1", address="192.168.1.11"),

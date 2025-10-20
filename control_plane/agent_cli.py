@@ -28,8 +28,6 @@ class AgentStatusTracker:
 def build_heartbeat_factory(
     config: AgentConfig,
     status_tracker: AgentStatusTracker,
-    *,
-    free_bytes: int,
 ) -> Callable[[], WorkerHeartbeat]:
     """Create a heartbeat factory that reflects the latest worker status."""
 
@@ -42,7 +40,6 @@ def build_heartbeat_factory(
         return WorkerHeartbeat(
             worker_id=config.worker_id,
             status=status_tracker.status,
-            free_bytes=free_bytes,
             control_plane_iface=config.network.control_plane_iface,
             control_plane_address=config.network.control_plane_address,
             data_plane_endpoints=endpoints,
@@ -117,12 +114,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="Seconds between heartbeat emissions",
     )
     parser.add_argument(
-        "--free-bytes",
-        type=int,
-        default=10**12,
-        help="Reported free capacity in bytes for heartbeats",
-    )
-    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
@@ -138,7 +129,6 @@ async def _run(args: argparse.Namespace) -> None:
     heartbeat_factory = build_heartbeat_factory(
         config,
         status_tracker,
-        free_bytes=args.free_bytes,
     )
     assignment_handler = build_assignment_handler(config, status_tracker)
     client = AgentClient(

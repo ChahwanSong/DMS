@@ -81,7 +81,6 @@ class DataPlaneEndpoint(BaseModel):
 class WorkerHeartbeat(BaseModel):
     worker_id: str
     status: WorkerStatus
-    free_bytes: int
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     control_plane_iface: Optional[str] = None
     control_plane_address: Optional[str] = None

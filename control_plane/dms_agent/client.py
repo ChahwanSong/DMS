@@ -2,11 +2,32 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from datetime import datetime
+from enum import Enum
+from typing import Any, Optional
 
 import httpx
 
 from dms_master.models import Assignment, SyncResult, WorkerHeartbeat
+
+
+def _jsonable_payload(model: Any) -> Any:
+    """Convert Pydantic-like models into JSON-serialisable payloads."""
+
+    def _convert(value: Any) -> Any:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return value.value
+        if hasattr(value, "dict"):
+            return _convert(value.dict())
+        if isinstance(value, dict):
+            return {key: _convert(inner) for key, inner in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_convert(inner) for inner in value]
+        return value
+
+    return _convert(model)
 
 
 class AgentClient:
@@ -25,7 +46,8 @@ class AgentClient:
         self._client = httpx.AsyncClient(timeout=30.0, transport=transport)
 
     async def send_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
-        await self._client.post(f"{self.master_url}/workers/heartbeat", json=heartbeat.dict())
+        payload = _jsonable_payload(heartbeat)
+        await self._client.post(f"{self.master_url}/workers/heartbeat", json=payload)
 
     async def poll_assignment(self, interval: float = 1.0) -> Optional[Assignment]:
         response = await self._client.post(f"{self.master_url}/workers/{self.worker_id}/assignment")
@@ -35,7 +57,8 @@ class AgentClient:
         return None
 
     async def report_result(self, result: SyncResult) -> None:
-        await self._client.post(f"{self.master_url}/workers/result", json=result.dict())
+        payload = _jsonable_payload(result)
+        await self._client.post(f"{self.master_url}/workers/result", json=payload)
 
     async def close(self) -> None:
         await self._client.aclose()
