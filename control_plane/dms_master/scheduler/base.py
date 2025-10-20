@@ -2,7 +2,21 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Iterable, List
+
+
+@dataclass(frozen=True)
+class WorkerInterface:
+    """Identifies a worker's data-plane interface advertised to the master."""
+
+    worker_id: str
+    iface: str
+    address: str
+
+    @property
+    def key(self) -> str:
+        return f"{self.worker_id}::{self.iface}"
 
 
 class SchedulerPolicy(ABC):
@@ -14,7 +28,7 @@ class SchedulerPolicy(ABC):
     """
 
     @abstractmethod
-    def select_workers(self, workers: Iterable[str], required: int) -> List[str]:
+    def select_workers(self, workers: Iterable[WorkerInterface], required: int) -> List[WorkerInterface]:
         """Pick workers to handle a piece of work.
 
         Args:

@@ -3,17 +3,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
+
+
+@dataclass
+class AgentDataPlaneEndpoint:
+    iface: str
+    address: str
 
 
 @dataclass
 class AgentNetworkConfig:
     control_plane_iface: str
     control_plane_address: str
-    data_plane_iface: str
-    data_plane_address: str
+    data_plane_endpoints: List[AgentDataPlaneEndpoint]
 
 
 @dataclass
@@ -36,14 +41,20 @@ def load_agent_config(path: str | Path) -> AgentConfig:
     required_network_fields = {
         "control_plane_iface",
         "control_plane_address",
-        "data_plane_iface",
-        "data_plane_address",
+        "data_plane_endpoints",
     }
     missing = required_network_fields - network_data.keys()
     if missing:
         raise ValueError(f"Agent network configuration missing fields: {', '.join(sorted(missing))}")
-
-    network = AgentNetworkConfig(**network_data)
+    endpoints_raw = network_data.get("data_plane_endpoints", [])
+    if not isinstance(endpoints_raw, list) or not endpoints_raw:
+        raise ValueError("Agent network configuration requires at least one data plane endpoint")
+    endpoints = [AgentDataPlaneEndpoint(**item) for item in endpoints_raw]
+    network = AgentNetworkConfig(
+        control_plane_iface=network_data["control_plane_iface"],
+        control_plane_address=network_data["control_plane_address"],
+        data_plane_endpoints=endpoints,
+    )
     master_url = data.get("master_url")
     if not master_url:
         raise ValueError("Agent configuration requires master_url")

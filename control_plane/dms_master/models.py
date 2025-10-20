@@ -73,6 +73,11 @@ class WorkerStatus(str, Enum):
     ERROR = "ERROR"
 
 
+class DataPlaneEndpoint(BaseModel):
+    iface: str
+    address: str
+
+
 class WorkerHeartbeat(BaseModel):
     worker_id: str
     status: WorkerStatus
@@ -80,8 +85,7 @@ class WorkerHeartbeat(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     control_plane_iface: Optional[str] = None
     control_plane_address: Optional[str] = None
-    data_plane_iface: Optional[str] = None
-    data_plane_address: Optional[str] = None
+    data_plane_endpoints: List[DataPlaneEndpoint] = Field(default_factory=list)
 
 
 class SyncProgress(BaseModel):
@@ -100,6 +104,8 @@ class Assignment(BaseModel):
     file_path: str
     chunk_offset: int
     chunk_size: int
+    data_plane_iface: Optional[str] = None
+    data_plane_address: Optional[str] = None
 
 
 class SyncResult(BaseModel):
@@ -108,3 +114,5 @@ class SyncResult(BaseModel):
     success: bool
     message: str = ""
     completed_at: datetime = Field(default_factory=datetime.utcnow)
+    data_plane_iface: Optional[str] = None
+    data_plane_address: Optional[str] = None

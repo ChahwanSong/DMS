@@ -1,7 +1,13 @@
 import asyncio
 
 from dms_master.config import MasterConfig
-from dms_master.models import SyncRequest, WorkerHeartbeat, WorkerStatus, SyncResult
+from dms_master.models import (
+    DataPlaneEndpoint,
+    SyncRequest,
+    WorkerHeartbeat,
+    WorkerStatus,
+    SyncResult,
+)
 from dms_master.server import DMSMaster
 
 
@@ -40,33 +46,45 @@ def test_submit_and_assignments():
         )
         await master.submit_request(request)
         await master.worker_heartbeat(
-            WorkerHeartbeat(worker_id="worker-1", status=WorkerStatus.IDLE, free_bytes=10**9)
-        )
-        await master.worker_heartbeat(
-            WorkerHeartbeat(worker_id="worker-2", status=WorkerStatus.IDLE, free_bytes=10**9)
+            WorkerHeartbeat(
+                worker_id="worker-1",
+                status=WorkerStatus.IDLE,
+                free_bytes=10**9,
+                data_plane_endpoints=[
+                    DataPlaneEndpoint(iface="ib0", address="192.168.1.10"),
+                    DataPlaneEndpoint(iface="ib1", address="192.168.1.11"),
+                ],
+            )
         )
         assignment1 = await master.next_assignment("worker-1", timeout=1.0)
-        assignment2 = await master.next_assignment("worker-2", timeout=1.0)
+        assignment2 = await master.next_assignment("worker-1", timeout=1.0)
         assert assignment1 is not None
         assert assignment2 is not None
+        assert {assignment1.data_plane_iface, assignment2.data_plane_iface} == {"ib0", "ib1"}
         await master.report_result(
             SyncResult(
                 request_id="req-1",
                 worker_id="worker-1",
                 success=True,
                 message="done",
+                data_plane_iface=assignment1.data_plane_iface,
             )
         )
         await master.report_result(
             SyncResult(
                 request_id="req-1",
-                worker_id="worker-2",
+                worker_id="worker-1",
                 success=True,
                 message="done",
+                data_plane_iface=assignment2.data_plane_iface,
             )
         )
         progress = await master.query_progress("req-1")
         assert progress is not None
         assert progress.state == "COMPLETED"
+        assert set(progress.detail.keys()) == {
+            f"worker-1::{assignment1.data_plane_iface}",
+            f"worker-1::{assignment2.data_plane_iface}",
+        }
 
     asyncio.run(scenario())

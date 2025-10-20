@@ -4,11 +4,17 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from .config import AgentConfig, AgentNetworkConfig, load_agent_config
+from .config import (
+    AgentConfig,
+    AgentDataPlaneEndpoint,
+    AgentNetworkConfig,
+    load_agent_config,
+)
 
 __all__ = [
     "AgentClient",
     "AgentConfig",
+    "AgentDataPlaneEndpoint",
     "AgentNetworkConfig",
     "load_agent_config",
     "run_agent",

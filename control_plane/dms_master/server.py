@@ -9,8 +9,15 @@ from typing import Deque, Dict, List, Optional
 
 from .config import MasterConfig
 from .logging_utils import configure_logging
-from .models import Assignment, SyncProgress, SyncRequest, SyncResult, WorkerHeartbeat
-from .scheduler.base import SchedulerPolicy, registry as scheduler_registry
+from .models import (
+    Assignment,
+    SyncProgress,
+    SyncRequest,
+    SyncResult,
+    WorkerHeartbeat,
+    WorkerStatus,
+)
+from .scheduler.base import SchedulerPolicy, WorkerInterface, registry as scheduler_registry
 from .scheduler import round_robin  # noqa: F401 ensure registration
 from .metadata import MetadataStore, RedisMetadataStore
 
@@ -21,6 +28,12 @@ class RequestState:
     progress: SyncProgress
     pending_files: Deque[str]
     active_assignments: Dict[str, Assignment]
+
+
+def _endpoint_key(worker_id: str, iface: Optional[str]) -> str:
+    if iface:
+        return f"{worker_id}::{iface}"
+    return worker_id
 
 
 class DMSMaster:
@@ -65,31 +78,55 @@ class DMSMaster:
 
     async def _schedule_work(self) -> None:
         async with self._lock:
-            available_workers = [wid for wid, hb in self._worker_status.items() if hb.status != hb.status.ERROR]
+            busy_endpoints = {
+                key
+                for state in self._requests.values()
+                for key in state.active_assignments.keys()
+            }
             for state in self._requests.values():
                 if not state.pending_files:
                     continue
                 needed = max(1, state.request.parallelism)
-                chosen = self.scheduler.select_workers(available_workers, needed)
-                for worker_id in chosen:
+                available_endpoints: List[WorkerInterface] = []
+                for worker_id, heartbeat in self._worker_status.items():
+                    if heartbeat.status == WorkerStatus.ERROR:
+                        continue
+                    for endpoint in heartbeat.data_plane_endpoints:
+                        interface = WorkerInterface(
+                            worker_id=worker_id,
+                            iface=endpoint.iface,
+                            address=endpoint.address,
+                        )
+                        if interface.key in busy_endpoints:
+                            continue
+                        available_endpoints.append(interface)
+                if not available_endpoints:
+                    continue
+                chosen = self.scheduler.select_workers(available_endpoints, needed)
+                for interface in chosen:
                     if not state.pending_files:
                         break
-                    if worker_id in state.active_assignments:
+                    endpoint_id = interface.key
+                    if endpoint_id in state.active_assignments:
                         continue
                     file_path = state.pending_files.popleft()
                     assignment = Assignment(
                         request_id=state.request.request_id,
-                        worker_id=worker_id,
+                        worker_id=interface.worker_id,
                         file_path=file_path,
                         chunk_offset=0,
                         chunk_size=state.request.chunk_size_mb * 1024 * 1024,
+                        data_plane_iface=interface.iface,
+                        data_plane_address=interface.address,
                     )
-                    state.active_assignments[worker_id] = assignment
+                    state.active_assignments[endpoint_id] = assignment
+                    busy_endpoints.add(endpoint_id)
                     await self._assignment_queue.put(assignment)
                     self.logger.info(
-                        "Assigned %s to worker %s for request %s",
+                        "Assigned %s to worker %s (%s) for request %s",
                         file_path,
-                        worker_id,
+                        interface.worker_id,
+                        interface.iface,
                         state.request.request_id,
                     )
 
@@ -117,18 +154,24 @@ class DMSMaster:
                 return
             self._result_log[result.request_id].append(result)
             state.progress.updated_at = datetime.utcnow()
+            detail_key = _endpoint_key(result.worker_id, result.data_plane_iface)
             if result.success:
-                state.progress.detail[result.worker_id] = "COMPLETED"
+                state.progress.detail[detail_key] = "COMPLETED"
             else:
                 state.progress.state = "FAILED"
-                state.progress.detail[result.worker_id] = result.message
+                state.progress.detail[detail_key] = result.message
                 self.logger.error(
-                    "Request %s failed on worker %s: %s",
+                    "Request %s failed on worker %s (%s): %s",
                     result.request_id,
                     result.worker_id,
+                    result.data_plane_iface or "unknown-iface",
                     result.message,
                 )
-            state.active_assignments.pop(result.worker_id, None)
+            assignment_key = _endpoint_key(result.worker_id, result.data_plane_iface)
+            if assignment_key not in state.active_assignments:
+                # Fallback to worker_id only if provided interface is missing
+                assignment_key = result.worker_id
+            state.active_assignments.pop(assignment_key, None)
             if not state.pending_files and not state.active_assignments:
                 if state.progress.state != "FAILED":
                     state.progress.state = "COMPLETED"

@@ -96,7 +96,8 @@ redis:
 
 Each agent has its own configuration describing which interfaces to use for control and data
 plane communication. The YAML below (shipped as `example_agent.yml`) binds control-plane
-traffic to `eth0` and data-plane transfers to `ib0`:
+traffic to `eth0` and advertises two InfiniBand adapters for the data plane. The master will
+load balance assignments across the advertised interfaces:
 
 ```yaml
 master_url: http://127.0.0.1:8000
@@ -104,8 +105,11 @@ worker_id: worker-a
 network:
   control_plane_iface: eth0
   control_plane_address: 10.0.0.10
-  data_plane_iface: ib0
-  data_plane_address: 192.168.100.10
+  data_plane_endpoints:
+    - iface: ib0
+      address: 192.168.100.10
+    - iface: ib1
+      address: 192.168.100.11
 ```
 
 To start a basic asyncio worker that only acknowledges assignments you can run:
@@ -118,7 +122,12 @@ from control_plane.dms_agent import (
     load_agent_config,
     run_agent,
 )
-from control_plane.dms_master.models import WorkerHeartbeat, WorkerStatus, SyncResult
+from control_plane.dms_master.models import (
+    DataPlaneEndpoint,
+    WorkerHeartbeat,
+    WorkerStatus,
+    SyncResult,
+)
 
 config = load_agent_config("example_agent.yml")
 
@@ -136,14 +145,21 @@ def heartbeat_factory():
         free_bytes=10**12,
         control_plane_iface=config.network.control_plane_iface,
         control_plane_address=config.network.control_plane_address,
-        data_plane_iface=config.network.data_plane_iface,
-        data_plane_address=config.network.data_plane_address,
+        data_plane_endpoints=[
+            DataPlaneEndpoint(iface=ep.iface, address=ep.address)
+            for ep in config.network.data_plane_endpoints
+        ],
     )
 
 
 async def assignment_handler(assignment):
     # Integrate with the C++ data plane here. For now we only acknowledge success.
-    return SyncResult(request_id=assignment.request_id, worker_id=config.worker_id, success=True)
+    return SyncResult(
+        request_id=assignment.request_id,
+        worker_id=config.worker_id,
+        success=True,
+        data_plane_iface=assignment.data_plane_iface,
+    )
 
 asyncio.run(run_agent(client, heartbeat_factory, assignment_handler))
 ```
@@ -189,7 +205,8 @@ ctest --test-dir build --output-on-failure
   network adapters.
 - Configure interface bindings per worker using the agent YAML configuration so each process
   reports the correct interfaces and binds its control-plane client socket accordingly. The
-  master only uses the control-plane adapter.
+  master only uses the control-plane adapter. You can advertise multiple data-plane
+  interfaces per agent; the scheduler automatically load balances work across them.
 - Implement a site-specific `NetworkTransport` derived from `dms::NetworkTransport` to map
   to the HPC fabric (e.g., RoCEv2) and plug it into worker agents.
 - Extend `SchedulerPolicy` with policies tailored to server topology or storage locality.

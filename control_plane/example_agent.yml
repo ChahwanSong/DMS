@@ -3,5 +3,8 @@ worker_id: worker-a
 network:
   control_plane_iface: eth0
   control_plane_address: 10.0.0.10
-  data_plane_iface: ib0
-  data_plane_address: 192.168.100.10
+  data_plane_endpoints:
+    - iface: ib0
+      address: 192.168.100.10
+    - iface: ib1
+      address: 192.168.100.11
