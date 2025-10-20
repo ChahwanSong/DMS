@@ -1,7 +1,7 @@
 """Configuration utilities for the DMS master server."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict
 
@@ -28,7 +28,7 @@ class RedisConfig:
 class MasterConfig:
     scheduler: str = "round_robin"
     network: NetworkInterfaceConfig | None = None
-    redis: RedisConfig | None = None
+    redis: RedisConfig = field(default_factory=RedisConfig)
     worker_heartbeat_timeout: float = 30.0
 
 
@@ -52,9 +52,9 @@ def load_config(path: str | Path | None) -> MasterConfig:
     if network_cfg:
         network = NetworkInterfaceConfig(**network_cfg)
     redis_cfg = data.get("redis")
-    redis = None
-    if redis_cfg:
-        redis = RedisConfig(**redis_cfg)
+    if not redis_cfg:
+        raise ValueError("Redis configuration is required in the master configuration file")
+    redis = RedisConfig(**redis_cfg)
     scheduler = data.get("scheduler", DEFAULT_CONFIG.scheduler)
     heartbeat_timeout = data.get(
         "worker_heartbeat_timeout", DEFAULT_CONFIG.worker_heartbeat_timeout

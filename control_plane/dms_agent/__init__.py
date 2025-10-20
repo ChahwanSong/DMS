@@ -1,4 +1,22 @@
 """DMS worker agent package."""
-from .client import AgentClient, run_agent
+from __future__ import annotations
 
-__all__ = ["AgentClient", "run_agent"]
+from importlib import import_module
+from typing import Any
+
+from .config import AgentConfig, AgentNetworkConfig, load_agent_config
+
+__all__ = [
+    "AgentClient",
+    "AgentConfig",
+    "AgentNetworkConfig",
+    "load_agent_config",
+    "run_agent",
+]
+
+
+def __getattr__(name: str) -> Any:
+    if name in {"AgentClient", "run_agent"}:
+        module = import_module(".client", __name__)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

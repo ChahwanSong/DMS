@@ -10,10 +10,19 @@ from dms_master.models import Assignment, SyncResult, WorkerHeartbeat
 
 
 class AgentClient:
-    def __init__(self, master_url: str, worker_id: str) -> None:
+    def __init__(
+        self,
+        master_url: str,
+        worker_id: str,
+        *,
+        control_plane_bind: Optional[str] = None,
+    ) -> None:
         self.master_url = master_url.rstrip("/")
         self.worker_id = worker_id
-        self._client = httpx.AsyncClient(timeout=30.0)
+        transport = None
+        if control_plane_bind:
+            transport = httpx.AsyncHTTPTransport(local_address=control_plane_bind)
+        self._client = httpx.AsyncClient(timeout=30.0, transport=transport)
 
     async def send_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
         await self._client.post(f"{self.master_url}/workers/heartbeat", json=heartbeat.dict())

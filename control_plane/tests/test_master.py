@@ -5,9 +5,32 @@ from dms_master.models import SyncRequest, WorkerHeartbeat, WorkerStatus, SyncRe
 from dms_master.server import DMSMaster
 
 
+class DummyMetadataStore:
+    def __init__(self):
+        self.requests = {}
+        self.results = {}
+        self.heartbeats = {}
+
+    async def store_request(self, progress):
+        self.requests[progress.request_id] = progress
+
+    async def update_progress(self, progress):
+        self.requests[progress.request_id] = progress
+
+    async def append_result(self, result):
+        self.results.setdefault(result.request_id, []).append(result)
+
+    async def record_worker(self, heartbeat):
+        self.heartbeats[heartbeat.worker_id] = heartbeat
+
+    async def delete_request(self, request_id: str) -> None:
+        self.requests.pop(request_id, None)
+        self.results.pop(request_id, None)
+
+
 def test_submit_and_assignments():
     async def scenario():
-        master = DMSMaster(MasterConfig())
+        master = DMSMaster(MasterConfig(), metadata_store=DummyMetadataStore())
         request = SyncRequest(
             request_id="req-1",
             source_path="/home/clusterA/foo",

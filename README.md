@@ -58,9 +58,9 @@ Unit tests validate the chunking logic and concurrent transfer manager behaviour
 
 - **Python:** 3.12 or newer.
 - **C++ toolchain:** GCC ≥ 12 with CMake ≥ 3.20.
-- **Redis (optional):** The master configuration supports Redis metadata storage. Install
-  using your distribution package manager (`sudo apt install redis-server`) or refer to the
-  official Redis documentation. Update `config.yml` accordingly when enabling it.
+- **Redis (mandatory):** Redis backs all metadata in the master. Install it with your
+  distribution package manager (`sudo apt install redis-server`) or refer to the official
+  Redis documentation. Ensure the service is running before starting the DMS master.
 
 ## Python environment setup
 
@@ -79,18 +79,73 @@ export PYTHONPATH=$(pwd)
 python master_cli.py --config example_master.yml --host 127.0.0.1 --port 8000
 ```
 
-Example configuration (`example_master.yml`):
+Example master configuration (`example_master.yml`):
 
 ```yaml
 scheduler: round_robin
 network:
   control_plane_iface: eth0
-  data_plane_iface: ib0
 worker_heartbeat_timeout: 45.0
 redis:
   host: localhost
   port: 6379
   db: 0
+```
+
+### Running a worker agent locally
+
+Each agent has its own configuration describing which interfaces to use for control and data
+plane communication. The YAML below (shipped as `example_agent.yml`) binds control-plane
+traffic to `eth0` and data-plane transfers to `ib0`:
+
+```yaml
+master_url: http://127.0.0.1:8000
+worker_id: worker-a
+network:
+  control_plane_iface: eth0
+  control_plane_address: 10.0.0.10
+  data_plane_iface: ib0
+  data_plane_address: 192.168.100.10
+```
+
+To start a basic asyncio worker that only acknowledges assignments you can run:
+
+```python
+import asyncio
+from control_plane.dms_agent import (
+    AgentClient,
+    AgentConfig,
+    load_agent_config,
+    run_agent,
+)
+from control_plane.dms_master.models import WorkerHeartbeat, WorkerStatus, SyncResult
+
+config = load_agent_config("example_agent.yml")
+
+client = AgentClient(
+    config.master_url,
+    worker_id=config.worker_id,
+    control_plane_bind=config.network.control_plane_address,
+)
+
+
+def heartbeat_factory():
+    return WorkerHeartbeat(
+        worker_id=config.worker_id,
+        status=WorkerStatus.IDLE,
+        free_bytes=10**12,
+        control_plane_iface=config.network.control_plane_iface,
+        control_plane_address=config.network.control_plane_address,
+        data_plane_iface=config.network.data_plane_iface,
+        data_plane_address=config.network.data_plane_address,
+    )
+
+
+async def assignment_handler(assignment):
+    # Integrate with the C++ data plane here. For now we only acknowledge success.
+    return SyncResult(request_id=assignment.request_id, worker_id=config.worker_id, success=True)
+
+asyncio.run(run_agent(client, heartbeat_factory, assignment_handler))
 ```
 
 ### Submitting a test sync request
@@ -108,27 +163,6 @@ curl -X POST http://127.0.0.1:8000/sync \
       }'
 ```
 
-### Worker agent skeleton
-
-```python
-import asyncio
-from control_plane.dms_agent import AgentClient, run_agent
-from control_plane.dms_master.models import WorkerHeartbeat, WorkerStatus, SyncResult
-
-client = AgentClient("http://127.0.0.1:8000", worker_id="worker-a")
-
-
-def heartbeat_factory():
-    return WorkerHeartbeat(worker_id="worker-a", status=WorkerStatus.IDLE, free_bytes=10**12)
-
-
-async def assignment_handler(assignment):
-    # Integrate with the C++ data plane here
-    return SyncResult(request_id=assignment.request_id, worker_id="worker-a", success=True)
-
-asyncio.run(run_agent(client, heartbeat_factory, assignment_handler))
-```
-
 ## C++ data plane build and test
 
 ```bash
@@ -140,22 +174,27 @@ ctest --test-dir build --output-on-failure
 
 ## End-to-end testing on a single node
 
-1. Start the master server locally as described above.
-2. Run a mock agent that immediately acknowledges assignments.
-3. Use the `TransferManager` in standalone mode to copy files across local directories to
-   validate chunking and concurrency before deploying to production.
+1. Launch Redis locally (`sudo systemctl start redis-server`).
+2. Start the master server with `python master_cli.py --config example_master.yml`.
+3. In a second shell, start an agent using the sample script above. The agent will bind its
+   control-plane client to the configured address and advertise the interfaces in heartbeats.
+4. Submit a sync request with `curl` as shown earlier and observe the logs from both the master
+   and the agent.
+5. Use the C++ `TransferManager` in standalone mode to exercise the data-plane logic with the
+   advertised data-plane interface when integrating into production.
 
 ## Production deployment notes
 
 - Deploy dedicated master and worker nodes. Only workers require access to the data-plane
   network adapters.
-- Configure interface bindings per host using the YAML configuration. The master only uses
-  the control plane adapter.
+- Configure interface bindings per worker using the agent YAML configuration so each process
+  reports the correct interfaces and binds its control-plane client socket accordingly. The
+  master only uses the control-plane adapter.
 - Implement a site-specific `NetworkTransport` derived from `dms::NetworkTransport` to map
   to the HPC fabric (e.g., RoCEv2) and plug it into worker agents.
 - Extend `SchedulerPolicy` with policies tailored to server topology or storage locality.
-- Persist request metadata in Redis (or another KV store) by integrating the hooks provided
-  in `dms_master.server.DMSMaster`.
+- Request metadata is persisted in Redis. Provision a highly-available Redis deployment for
+  production use and ensure the master can reach it over the management network.
 
 ## Running automated tests
 

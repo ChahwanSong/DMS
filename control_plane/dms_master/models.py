@@ -78,6 +78,10 @@ class WorkerHeartbeat(BaseModel):
     status: WorkerStatus
     free_bytes: int
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    control_plane_iface: Optional[str] = None
+    control_plane_address: Optional[str] = None
+    data_plane_iface: Optional[str] = None
+    data_plane_address: Optional[str] = None
 
 
 class SyncProgress(BaseModel):

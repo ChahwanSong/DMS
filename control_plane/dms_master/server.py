@@ -12,6 +12,7 @@ from .logging_utils import configure_logging
 from .models import Assignment, SyncProgress, SyncRequest, SyncResult, WorkerHeartbeat
 from .scheduler.base import SchedulerPolicy, registry as scheduler_registry
 from .scheduler import round_robin  # noqa: F401 ensure registration
+from .metadata import MetadataStore, RedisMetadataStore
 
 
 @dataclass
@@ -25,7 +26,7 @@ class RequestState:
 class DMSMaster:
     """In-memory orchestration of sync requests and worker assignments."""
 
-    def __init__(self, config: MasterConfig) -> None:
+    def __init__(self, config: MasterConfig, metadata_store: MetadataStore | None = None) -> None:
         self.config = config
         self.logger = configure_logging("dms.master")
         self.scheduler: SchedulerPolicy = scheduler_registry.create(config.scheduler)
@@ -34,6 +35,9 @@ class DMSMaster:
         self._result_log: Dict[str, List[SyncResult]] = defaultdict(list)
         self._assignment_queue: asyncio.Queue[Assignment] = asyncio.Queue()
         self._lock = asyncio.Lock()
+        if config.redis is None:
+            raise ValueError("Redis configuration must be provided for the master server")
+        self.metadata: MetadataStore = metadata_store or RedisMetadataStore.from_config(config.redis)
 
     async def submit_request(self, request: SyncRequest) -> None:
         async with self._lock:
@@ -56,6 +60,7 @@ class DMSMaster:
             )
             self._requests[request.request_id] = state
             self.logger.info("Request %s queued with %d files", request.request_id, len(pending_files))
+            await self.metadata.store_request(progress)
         await self._schedule_work()
 
     async def _schedule_work(self) -> None:
@@ -91,6 +96,7 @@ class DMSMaster:
     async def worker_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
         async with self._lock:
             self._worker_status[heartbeat.worker_id] = heartbeat
+        await self.metadata.record_worker(heartbeat)
         await self._schedule_work()
 
     async def next_assignment(self, worker_id: str, timeout: float = 1.0) -> Optional[Assignment]:
@@ -127,6 +133,8 @@ class DMSMaster:
                 if state.progress.state != "FAILED":
                     state.progress.state = "COMPLETED"
                 self.logger.info("Request %s completed", result.request_id)
+            await self.metadata.append_result(result)
+            await self.metadata.update_progress(state.progress)
 
     async def query_progress(self, request_id: str) -> Optional[SyncProgress]:
         async with self._lock:
@@ -142,3 +150,4 @@ class DMSMaster:
             self._requests.pop(request_id, None)
             self._result_log.pop(request_id, None)
             self.logger.info("Request %s removed from master state", request_id)
+        await self.metadata.delete_request(request_id)
