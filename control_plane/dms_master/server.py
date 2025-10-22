@@ -136,7 +136,6 @@ class DMSMaster:
             for state in self._requests.values():
                 if not state.pending_files:
                     continue
-                needed = max(1, state.request.parallelism)
                 source_pool = self._worker_pool_for_path(state.request.source_path)
                 destination_pool = self._worker_pool_for_path(
                     state.request.destination_path
@@ -177,6 +176,9 @@ class DMSMaster:
                             continue
                         available_endpoints.append(interface)
                 if not available_endpoints:
+                    continue
+                needed = min(len(available_endpoints), len(state.pending_files))
+                if needed <= 0:
                     continue
                 chosen = self.scheduler.select_workers(available_endpoints, needed)
                 for interface in chosen:

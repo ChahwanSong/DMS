@@ -46,7 +46,7 @@ The data plane is written in C++20. It focuses on efficient chunking and transfe
 with minimal memory overhead:
 
 - `FileChunker` enumerates files and splits them into bounded-size chunks suitable for
-  parallel transfer.
+  efficient transfer.
 - `TransferManager` maintains a worker thread pool, converts transfer jobs into chunks, and
   streams data through an injectable `NetworkTransport` interface.
 - Every chunk carries a CRC32 checksum via the transport layer so receivers can validate
@@ -139,9 +139,7 @@ curl -X POST http://127.0.0.1:8888/sync \
         "request_id": "demo-1",
         "source_path": "/home/clusterA/demo",
         "destination_path": "/home/clusterB",
-        "parallelism": 4,
         "chunk_size_mb": 64,
-        "direction": "A_TO_B"
       }'
 ```
 
