@@ -1,6 +1,9 @@
 master_url: http://127.0.0.1:8888
 workers:
   - worker_id: worker-a
+    storage_paths:
+      - /home/gpu1
+      - /home/cpu1
     network:
       control_plane_iface: eth0
       control_plane_address: 192.168.65.4
@@ -8,6 +11,9 @@ workers:
         - iface: eth0
           address: 192.168.65.4
   - worker_id: worker-b
+    storage_paths:
+      - /home/gpu1
+      - /scratch
     network:
       control_plane_iface: eth0
       control_plane_address: 192.168.65.5

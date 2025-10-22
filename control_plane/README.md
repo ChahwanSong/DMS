@@ -61,6 +61,31 @@ python agent_cli.py --worker-id worker-a --config example_agent.yml
 The CLI loads `worker-a` from `example_agent.yml`. Provide a different `--worker-id` to start
 multiple agents from the same file.
 
+Each worker entry must include a `storage_paths` list describing the root directories mounted on
+that machine. The master uses this information to determine which workers can satisfy a sync
+request. The sample configuration shows two workers:
+
+```yaml
+workers:
+  - worker_id: worker-a
+    storage_paths:
+      - /home/gpu1
+      - /home/cpu1
+    network:
+      ...
+  - worker_id: worker-b
+    storage_paths:
+      - /home/gpu1
+      - /scratch
+    network:
+      ...
+```
+
+When the agent sends heartbeats, these storage paths are included so the master can restrict
+assignment policies to workers that have access to the requested source paths. The master also
+shares both the source and destination worker pools with the agent for each assignment so the
+data transfer implementation can contact the appropriate peers.
+
 ## Helpful environment variables
 
 - `REDIS_URL`: override the Redis connection URL used by the tests and the master. Defaults

@@ -23,7 +23,12 @@ def _make_config() -> AgentConfig:
             AgentDataPlaneEndpoint(iface="ib1", address="192.168.0.11"),
         ],
     )
-    return AgentConfig(master_url="http://127.0.0.1:8000", worker_id="worker-a", network=network)
+    return AgentConfig(
+        master_url="http://127.0.0.1:8000",
+        worker_id="worker-a",
+        network=network,
+        storage_paths=["/mnt/source", "/mnt/destination"],
+    )
 
 
 def test_heartbeat_factory_tracks_status() -> None:
@@ -34,6 +39,7 @@ def test_heartbeat_factory_tracks_status() -> None:
     hb = factory()
     assert hb.status == WorkerStatus.IDLE
     assert len(hb.data_plane_endpoints) == 2
+    assert hb.storage_paths == ["/mnt/source", "/mnt/destination"]
 
     tracker.status = WorkerStatus.TRANSFERRING
     hb2 = factory()

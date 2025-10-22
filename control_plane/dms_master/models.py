@@ -113,6 +113,10 @@ class WorkerHeartbeat(BaseModel):
     control_plane_iface: Optional[str] = None
     control_plane_address: Optional[str] = None
     data_plane_endpoints: List[DataPlaneEndpoint] = Field(default_factory=list)
+    storage_paths: List[str] = Field(
+        default_factory=list,
+        description="List of directories accessible from this worker",
+    )
 
 
 class SyncProgress(BaseModel):
@@ -133,6 +137,14 @@ class Assignment(BaseModel):
     chunk_size: int
     data_plane_iface: Optional[str] = None
     data_plane_address: Optional[str] = None
+    source_worker_pool: List[str] = Field(
+        default_factory=list,
+        description="Workers that can access the sync source",
+    )
+    destination_worker_pool: List[str] = Field(
+        default_factory=list,
+        description="Workers that can access the sync destination",
+    )
 
 
 class SyncResult(BaseModel):
