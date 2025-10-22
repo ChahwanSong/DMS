@@ -23,6 +23,9 @@ def pytest_collection_modifyitems(items):
         obj = getattr(item, "obj", None)
         if obj and inspect.iscoroutinefunction(obj):
             item.obj = _wrap_async(obj)
+            item.own_markers = [
+                marker for marker in item.own_markers if marker.name != "asyncio"
+            ]
 
 
 def pytest_configure(config):
