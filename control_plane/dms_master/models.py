@@ -55,13 +55,6 @@ except ModuleNotFoundError:  # pragma: no cover - minimal fallback for test envi
         @classmethod
         def parse_obj(cls, obj: Dict[str, Any]) -> "BaseModel":
             return cls(**obj)
-
-
-class SyncDirection(str, Enum):
-    A_TO_B = "A_TO_B"
-    B_TO_A = "B_TO_A"
-
-
 class SyncRequest(BaseModel):
     request_id: str = Field(..., description="Unique identifier for the sync request")
     source_path: str
@@ -69,9 +62,7 @@ class SyncRequest(BaseModel):
     file_list: Optional[List[str]] = Field(
         None, description="Optional subset of files to sync instead of full directory"
     )
-    parallelism: int = Field(4, ge=1, le=64)
     chunk_size_mb: int = Field(64, ge=1, le=1024)
-    direction: SyncDirection = SyncDirection.A_TO_B
 
     def __init__(self, **data: Any) -> None:  # type: ignore[override]
         super().__init__(**data)

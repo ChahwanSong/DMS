@@ -5,7 +5,7 @@
 default_target: all
 .PHONY : default_target
 
-# Allow only one "make -f Makefile2" at a time, but pass parallelism.
+# Allow only one "make -f Makefile2" at a time.
 .NOTPARALLEL:
 
 #=============================================================================

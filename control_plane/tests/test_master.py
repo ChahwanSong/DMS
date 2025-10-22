@@ -52,7 +52,6 @@ def test_submit_and_assignments():
             source_path="/home/clusterA/foo",
             destination_path="/home/clusterB",
             file_list=["/home/clusterA/foo/file1", "/home/clusterA/foo/file2"],
-            parallelism=2,
         )
         await master.submit_request(request)
         await master.worker_heartbeat(

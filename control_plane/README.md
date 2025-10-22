@@ -60,13 +60,11 @@ returns `202 Accepted` when the request is accepted for scheduling.
 ```bash
 curl -X POST http://127.0.0.1:8888/sync \
   -H 'Content-Type: application/json' \
-  -d '{
+-d '{
         "request_id": "demo-1",
         "source_path": "/data/source",
         "destination_path": "/data/dest",
-        "parallelism": 4,
         "chunk_size_mb": 64,
-        "direction": "A_TO_B"
       }'
 ```
 
