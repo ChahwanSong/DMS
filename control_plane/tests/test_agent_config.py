@@ -12,22 +12,32 @@ def test_load_agent_config(tmp_path: Path) -> None:
     cfg.write_text(
         """
 master_url: http://localhost:8000
-worker_id: worker-1
-network:
-  control_plane_iface: eth0
-  control_plane_address: 10.0.0.10
-  data_plane_endpoints:
-    - iface: ib0
-      address: 192.168.1.10
-    - iface: ib1
-      address: 192.168.1.11
+workers:
+  - worker_id: worker-1
+    network:
+      control_plane_iface: eth0
+      control_plane_address: 10.0.0.10
+      data_plane_endpoints:
+        - iface: ib0
+          address: 192.168.1.10
+        - iface: ib1
+          address: 192.168.1.11
+  - worker_id: worker-2
+    master_url: http://localhost:9000
+    network:
+      control_plane_iface: eth1
+      control_plane_address: 10.0.0.11
+      data_plane_endpoints:
+        - iface: ib2
+          address: 192.168.1.12
 """
     )
-    config = load_agent_config(cfg)
-    assert config.worker_id == "worker-1"
-    assert config.network.control_plane_iface == "eth0"
-    assert len(config.network.data_plane_endpoints) == 2
-    assert config.network.data_plane_endpoints[0].iface == "ib0"
+    config = load_agent_config(cfg, "worker-2")
+    assert config.worker_id == "worker-2"
+    assert config.master_url == "http://localhost:9000"
+    assert config.network.control_plane_iface == "eth1"
+    assert len(config.network.data_plane_endpoints) == 1
+    assert config.network.data_plane_endpoints[0].iface == "ib2"
 
 
 def test_load_agent_config_missing_network(tmp_path: Path) -> None:
@@ -35,11 +45,12 @@ def test_load_agent_config_missing_network(tmp_path: Path) -> None:
     cfg.write_text(
         """
 master_url: http://localhost:8000
-worker_id: worker-1
+workers:
+  - worker_id: worker-1
 """
     )
     with pytest.raises(ValueError):
-        load_agent_config(cfg)
+        load_agent_config(cfg, "worker-1")
 
 
 def test_load_agent_config_requires_data_plane_endpoints(tmp_path: Path) -> None:
@@ -47,12 +58,32 @@ def test_load_agent_config_requires_data_plane_endpoints(tmp_path: Path) -> None
     cfg.write_text(
         """
 master_url: http://localhost:8000
-worker_id: worker-1
-network:
-  control_plane_iface: eth0
-  control_plane_address: 10.0.0.10
-  data_plane_endpoints: []
+workers:
+  - worker_id: worker-1
+    network:
+      control_plane_iface: eth0
+      control_plane_address: 10.0.0.10
+      data_plane_endpoints: []
 """
     )
     with pytest.raises(ValueError):
-        load_agent_config(cfg)
+        load_agent_config(cfg, "worker-1")
+
+
+def test_load_agent_config_missing_worker(tmp_path: Path) -> None:
+    cfg = tmp_path / "agent.yml"
+    cfg.write_text(
+        """
+master_url: http://localhost:8000
+workers:
+  - worker_id: worker-1
+    network:
+      control_plane_iface: eth0
+      control_plane_address: 10.0.0.10
+      data_plane_endpoints:
+        - iface: ib0
+          address: 192.168.1.10
+"""
+    )
+    with pytest.raises(KeyError):
+        load_agent_config(cfg, "worker-unknown")

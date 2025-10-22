@@ -29,6 +29,10 @@ class MetadataStore(Protocol):
     async def delete_request(self, request_id: str) -> None:
         ...
 
+    async def health_check(self) -> None:
+        """Verify that the backing store is reachable."""
+        ...
+
 
 class RedisMetadataStore:
     """Simple JSON-based metadata persistence layer stored in Redis."""
@@ -78,6 +82,9 @@ class RedisMetadataStore:
             self._request_key(request_id),
             self._result_key(request_id),
         )
+
+    async def health_check(self) -> None:
+        await self._client.ping()
 
     @staticmethod
     def _dump(model) -> str:

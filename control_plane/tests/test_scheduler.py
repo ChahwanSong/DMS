@@ -14,3 +14,21 @@ def test_round_robin_registration():
     assert [worker.worker_id for worker in selection] == ["worker-a", "worker-b"]
     selection = policy.select_workers(workers, 2)
     assert [worker.worker_id for worker in selection] == ["worker-c", "worker-a"]
+
+
+def test_round_robin_respects_rotation_with_changing_workers():
+    policy = registry.create("round_robin")
+    worker_a = WorkerInterface("worker-a", "ib0", "192.168.1.10")
+    worker_b = WorkerInterface("worker-b", "ib0", "192.168.1.11")
+
+    # First assignment goes to worker A
+    selection = policy.select_workers([worker_a, worker_b], 1)
+    assert [worker.worker_id for worker in selection] == ["worker-a"]
+
+    # When only worker B is available, it should receive work
+    selection = policy.select_workers([worker_b], 1)
+    assert [worker.worker_id for worker in selection] == ["worker-b"]
+
+    # Once worker A returns, it should be next in line
+    selection = policy.select_workers([worker_a, worker_b], 1)
+    assert [worker.worker_id for worker in selection] == ["worker-a"]

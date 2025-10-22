@@ -6,7 +6,13 @@ import asyncio
 import logging
 from typing import Awaitable, Callable, Optional
 
-from dms_agent import AgentClient, AgentConfig, load_agent_config, run_agent
+from dms_agent import (
+    AgentClient,
+    AgentCommunicationError,
+    AgentConfig,
+    load_agent_config,
+    run_agent,
+)
 from dms_master.models import (
     Assignment,
     DataPlaneEndpoint,
@@ -105,7 +111,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         required=True,
-        help="Path to the agent YAML configuration",
+        help="Path to the agent YAML configuration set",
+    )
+    parser.add_argument(
+        "--worker-id",
+        required=True,
+        help="Worker identifier to load from the configuration",
     )
     parser.add_argument(
         "--heartbeat-interval",
@@ -123,7 +134,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    config = load_agent_config(args.config)
+    config = load_agent_config(args.config, args.worker_id)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     status_tracker = AgentStatusTracker()
     heartbeat_factory = build_heartbeat_factory(
@@ -136,12 +147,16 @@ async def _run(args: argparse.Namespace) -> None:
         worker_id=config.worker_id,
         control_plane_bind=config.network.control_plane_address,
     )
-    await run_agent(
-        client,
-        heartbeat_factory,
-        assignment_handler,
-        interval=args.heartbeat_interval,
-    )
+    try:
+        await run_agent(
+            client,
+            heartbeat_factory,
+            assignment_handler,
+            interval=args.heartbeat_interval,
+        )
+    except AgentCommunicationError as exc:
+        logging.error("%s", exc)
+        raise SystemExit(1)
 
 
 def main(argv: Optional[list[str]] = None) -> None:
