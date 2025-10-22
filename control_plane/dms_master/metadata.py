@@ -37,9 +37,15 @@ class MetadataStore(Protocol):
 class RedisMetadataStore:
     """Simple JSON-based metadata persistence layer stored in Redis."""
 
-    def __init__(self, client: Redis, namespace: str = "dms") -> None:
+    def __init__(
+        self,
+        client: Redis,
+        namespace: str = "dms",
+        expiry_seconds: int | None = 60 * 24 * 3600,
+    ) -> None:
         self._client = client
         self._namespace = namespace
+        self._expiry_seconds = expiry_seconds
 
     @classmethod
     def from_config(cls, config: RedisConfig, namespace: str = "dms") -> "RedisMetadataStore":
@@ -54,7 +60,10 @@ class RedisMetadataStore:
             encoding="utf-8",
             decode_responses=True,
         )
-        return cls(client, namespace=namespace)
+        expiry_seconds = int(config.expiry_days * 24 * 3600)
+        if expiry_seconds <= 0:
+            expiry_seconds = None
+        return cls(client, namespace=namespace, expiry_seconds=expiry_seconds)
 
     def _request_key(self, request_id: str) -> str:
         return f"{self._namespace}:requests:{request_id}"
@@ -66,16 +75,31 @@ class RedisMetadataStore:
         return f"{self._namespace}:workers:{worker_id}"
 
     async def store_request(self, progress: SyncProgress) -> None:
-        await self._client.set(self._request_key(progress.request_id), self._dump(progress))
+        await self._client.set(
+            self._request_key(progress.request_id),
+            self._dump(progress),
+            ex=self._expiry_seconds,
+        )
 
     async def update_progress(self, progress: SyncProgress) -> None:
-        await self._client.set(self._request_key(progress.request_id), self._dump(progress))
+        await self._client.set(
+            self._request_key(progress.request_id),
+            self._dump(progress),
+            ex=self._expiry_seconds,
+        )
 
     async def append_result(self, result: SyncResult) -> None:
-        await self._client.rpush(self._result_key(result.request_id), self._dump(result))
+        key = self._result_key(result.request_id)
+        await self._client.rpush(key, self._dump(result))
+        if self._expiry_seconds is not None:
+            await self._client.expire(key, self._expiry_seconds)
 
     async def record_worker(self, heartbeat: WorkerHeartbeat) -> None:
-        await self._client.set(self._heartbeat_key(heartbeat.worker_id), self._dump(heartbeat))
+        await self._client.set(
+            self._heartbeat_key(heartbeat.worker_id),
+            self._dump(heartbeat),
+            ex=self._expiry_seconds,
+        )
 
     async def delete_request(self, request_id: str) -> None:
         await self._client.delete(
