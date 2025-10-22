@@ -147,11 +147,12 @@ class DMSMaster:
                     endpoint_id = interface.key
                     if endpoint_id in state.active_assignments:
                         continue
-                    file_path = state.pending_files.popleft()
+                    source_path = state.pending_files.popleft()
                     assignment = Assignment(
                         request_id=state.request.request_id,
                         worker_id=interface.worker_id,
-                        file_path=file_path,
+                        source_path=source_path,
+                        destination_path=state.request.destination_path,
                         chunk_offset=0,
                         chunk_size=state.request.chunk_size_mb * 1024 * 1024,
                         data_plane_iface=interface.iface,
@@ -164,7 +165,7 @@ class DMSMaster:
                     await self._assignment_queue.put(assignment)
                     self.logger.info(
                         "Assigned %s to worker %s (%s) for request %s",
-                        file_path,
+                        source_path,
                         interface.worker_id,
                         interface.iface,
                         state.request.request_id,
