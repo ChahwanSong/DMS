@@ -59,6 +59,7 @@ def test_submit_and_assignments():
             WorkerHeartbeat(
                 worker_id="worker-1",
                 status=WorkerStatus.IDLE,
+                storage_paths=["/home/clusterA", "/home/clusterB"],
                 data_plane_endpoints=[
                     DataPlaneEndpoint(iface="ib0", address="192.168.1.10"),
                     DataPlaneEndpoint(iface="ib1", address="192.168.1.11"),
@@ -70,6 +71,8 @@ def test_submit_and_assignments():
         assert assignment1 is not None
         assert assignment2 is not None
         assert {assignment1.data_plane_iface, assignment2.data_plane_iface} == {"ib0", "ib1"}
+        assert assignment1.source_worker_pool == ["worker-1"]
+        assert assignment1.destination_worker_pool == ["worker-1"]
         await master.report_result(
             SyncResult(
                 request_id="req-1",
@@ -95,6 +98,49 @@ def test_submit_and_assignments():
             f"worker-1::{assignment1.data_plane_iface}",
             f"worker-1::{assignment2.data_plane_iface}",
         }
+
+    asyncio.run(scenario())
+
+
+def test_assignment_respects_storage_paths():
+    async def scenario():
+        master = DMSMaster(MasterConfig(), metadata_store=DummyMetadataStore())
+        request = SyncRequest(
+            request_id="req-storage",
+            source_path="/data/source/project",
+            destination_path="/data/destination",
+            file_list=["/data/source/project/file1"],
+        )
+        await master.submit_request(request)
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-3",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data/destination"],
+                data_plane_endpoints=[
+                    DataPlaneEndpoint(iface="ib2", address="192.168.10.3"),
+                ],
+            )
+        )
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-2",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data/source"],
+                data_plane_endpoints=[
+                    DataPlaneEndpoint(iface="ib1", address="192.168.10.2"),
+                ],
+            )
+        )
+
+        assignment = await master.next_assignment("worker-2", timeout=1.0)
+        assert assignment is not None
+        assert assignment.worker_id == "worker-2"
+        assert assignment.source_worker_pool == ["worker-2"]
+        assert assignment.destination_worker_pool == ["worker-3"]
+
+        # Workers without source access should not receive assignments for this request.
+        assert await master.next_assignment("worker-3", timeout=0.1) is None
 
     asyncio.run(scenario())
 

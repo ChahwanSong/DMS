@@ -26,6 +26,7 @@ class AgentConfig:
     master_url: str
     worker_id: str
     network: AgentNetworkConfig
+    storage_paths: List[str]
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -88,5 +89,22 @@ def load_agent_config(path: str | Path, worker_id: str) -> AgentConfig:
 
     network = _build_network(worker_data.get("network"))
     worker_master_url = worker_data.get("master_url", master_url)
+    storage_paths_raw = worker_data.get("storage_paths")
+    if not storage_paths_raw or not isinstance(storage_paths_raw, list):
+        raise ValueError(
+            "Agent configuration requires a non-empty list of storage_paths for each worker"
+        )
+    storage_paths = []
+    for entry in storage_paths_raw:
+        if not isinstance(entry, str):
+            raise ValueError("Each storage_paths entry must be a string")
+        if not Path(entry).is_absolute():
+            raise ValueError(f"storage path '{entry}' must be an absolute path")
+        storage_paths.append(entry)
 
-    return AgentConfig(master_url=worker_master_url, worker_id=worker_id, network=network)
+    return AgentConfig(
+        master_url=worker_master_url,
+        worker_id=worker_id,
+        network=network,
+        storage_paths=storage_paths,
+    )

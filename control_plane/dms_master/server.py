@@ -5,7 +5,8 @@ import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Deque, Dict, List, Optional
+from pathlib import PurePosixPath
+from typing import Deque, Dict, List, Optional, Set
 
 from .config import MasterConfig
 from .logging_utils import configure_logging
@@ -36,6 +37,14 @@ def _endpoint_key(worker_id: str, iface: Optional[str]) -> str:
     return worker_id
 
 
+def _path_in_mount(path: str, mount: str) -> bool:
+    """Return True if *path* is contained within *mount*."""
+
+    path_obj = PurePosixPath(path)
+    mount_obj = PurePosixPath(mount)
+    return mount_obj == path_obj or mount_obj in path_obj.parents
+
+
 class DMSMaster:
     """In-memory orchestration of sync requests and worker assignments."""
 
@@ -51,6 +60,25 @@ class DMSMaster:
         if config.redis is None:
             raise ValueError("Redis configuration must be provided for the master server")
         self.metadata: MetadataStore = metadata_store or RedisMetadataStore.from_config(config.redis)
+
+    def _worker_pool_for_path(self, path: str) -> List[str]:
+        """Return worker IDs that can access the provided path."""
+
+        pool: list[str] = []
+        for worker_id, heartbeat in self._worker_status.items():
+            mounts = getattr(heartbeat, "storage_paths", []) or []
+            for mount in mounts:
+                if _path_in_mount(path, mount):
+                    pool.append(worker_id)
+                    break
+        # Deduplicate while preserving order to provide deterministic pools.
+        seen: set[str] = set()
+        ordered_pool: list[str] = []
+        for worker_id in pool:
+            if worker_id not in seen:
+                ordered_pool.append(worker_id)
+                seen.add(worker_id)
+        return ordered_pool
 
     async def submit_request(self, request: SyncRequest) -> None:
         async with self._lock:
@@ -87,8 +115,18 @@ class DMSMaster:
                 if not state.pending_files:
                     continue
                 needed = max(1, state.request.parallelism)
+                source_pool = self._worker_pool_for_path(state.request.source_path)
+                destination_pool = self._worker_pool_for_path(
+                    state.request.destination_path
+                )
+                candidate_workers: Set[str] = set(source_pool)
+                if not candidate_workers:
+                    continue
+
                 available_endpoints: List[WorkerInterface] = []
                 for worker_id, heartbeat in self._worker_status.items():
+                    if worker_id not in candidate_workers:
+                        continue
                     if heartbeat.status == WorkerStatus.ERROR:
                         continue
                     for endpoint in heartbeat.data_plane_endpoints:
@@ -118,6 +156,8 @@ class DMSMaster:
                         chunk_size=state.request.chunk_size_mb * 1024 * 1024,
                         data_plane_iface=interface.iface,
                         data_plane_address=interface.address,
+                        source_worker_pool=source_pool,
+                        destination_worker_pool=destination_pool,
                     )
                     state.active_assignments[endpoint_id] = assignment
                     busy_endpoints.add(endpoint_id)
