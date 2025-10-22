@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from dms_master.config import MasterConfig
 from dms_master.models import (
     DataPlaneEndpoint,
@@ -9,6 +11,11 @@ from dms_master.models import (
     SyncResult,
 )
 from dms_master.server import DMSMaster
+
+try:
+    from pydantic import ValidationError
+except ModuleNotFoundError:  # pragma: no cover - fallback paths during minimal testing
+    ValidationError = ValueError
 
 
 class DummyMetadataStore:
@@ -90,3 +97,19 @@ def test_submit_and_assignments():
         }
 
     asyncio.run(scenario())
+
+
+def test_sync_request_requires_absolute_paths():
+    with pytest.raises(ValidationError) as excinfo:
+        SyncRequest(
+            request_id="req-abs", source_path="relative/path", destination_path="/abs/path"
+        )
+
+    assert "source_path must be an absolute path" in str(excinfo.value)
+
+    with pytest.raises(ValidationError) as excinfo:
+        SyncRequest(
+            request_id="req-abs", source_path="/abs/path", destination_path="relative/path"
+        )
+
+    assert "destination_path must be an absolute path" in str(excinfo.value)

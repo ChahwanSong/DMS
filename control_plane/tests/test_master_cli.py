@@ -1,5 +1,3 @@
-import types
-
 import pytest
 
 from master_cli import ensure_redis_available, run_startup_checks
@@ -46,10 +44,10 @@ def test_run_startup_checks_exits_when_pytest_fails(monkeypatch, capsys):
     master = DummyMaster(metadata)
 
     monkeypatch.setattr("master_cli.ensure_redis_available", lambda m: None)
-    monkeypatch.setattr("master_cli.pytest", types.SimpleNamespace(main=lambda args: 1))
+    monkeypatch.setattr("master_cli._run_pytest", lambda args: 1)
 
     with pytest.raises(SystemExit) as exc:
-        run_startup_checks(master, ["tests"])
+        run_startup_checks(master, ["tests"], run_tests=True)
 
     assert exc.value.code == 1
     captured = capsys.readouterr()
@@ -63,10 +61,10 @@ def test_run_startup_checks_exits_when_redis_unavailable(monkeypatch, capsys):
     monkeypatch.setattr(
         "master_cli.ensure_redis_available", lambda m: (_ for _ in ()).throw(RuntimeError("no redis"))
     )
-    monkeypatch.setattr("master_cli.pytest", types.SimpleNamespace(main=lambda args: 0))
+    monkeypatch.setattr("master_cli._run_pytest", lambda args: (_ for _ in ()).throw(AssertionError("should not run")))
 
     with pytest.raises(SystemExit) as exc:
-        run_startup_checks(master, ["tests"])
+        run_startup_checks(master, ["tests"], run_tests=True)
 
     assert exc.value.code == 1
     captured = capsys.readouterr()
@@ -78,6 +76,6 @@ def test_run_startup_checks_passes_on_success(monkeypatch):
     master = DummyMaster(metadata)
 
     monkeypatch.setattr("master_cli.ensure_redis_available", lambda m: None)
-    monkeypatch.setattr("master_cli.pytest", types.SimpleNamespace(main=lambda args: 0))
+    monkeypatch.setattr("master_cli._run_pytest", lambda args: 0)
 
-    run_startup_checks(master, ["tests"])
+    run_startup_checks(master, ["tests"], run_tests=True)

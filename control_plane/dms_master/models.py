@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:  # pragma: no cover - prefer real pydantic when available
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, root_validator
 except ModuleNotFoundError:  # pragma: no cover - minimal fallback for test environments
 
     _UNSET = object()
@@ -20,6 +21,12 @@ except ModuleNotFoundError:  # pragma: no cover - minimal fallback for test envi
 
     def Field(default: Any = _UNSET, *, default_factory=None, **_: Any) -> Any:
         return _FieldInfo(default=default, default_factory=default_factory)
+
+    def root_validator(*_args: Any, **_kwargs: Any):
+        def decorator(func):
+            return func
+
+        return decorator
 
     class BaseModel:
         """Very small subset of the Pydantic interface used in tests."""
@@ -65,6 +72,27 @@ class SyncRequest(BaseModel):
     parallelism: int = Field(4, ge=1, le=64)
     chunk_size_mb: int = Field(64, ge=1, le=1024)
     direction: SyncDirection = SyncDirection.A_TO_B
+
+    def __init__(self, **data: Any) -> None:  # type: ignore[override]
+        super().__init__(**data)
+        self._enforce_absolute_paths()
+
+    @root_validator
+    def _validate_absolute_paths(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        cls._check_absolute_path("source_path", values.get("source_path"))
+        cls._check_absolute_path("destination_path", values.get("destination_path"))
+        return values
+
+    def _enforce_absolute_paths(self) -> None:
+        for field_name in ("source_path", "destination_path"):
+            self._check_absolute_path(field_name, getattr(self, field_name, None))
+
+    @staticmethod
+    def _check_absolute_path(field_name: str, value: Optional[str]) -> None:
+        if value is None:
+            return
+        if not Path(value).is_absolute():
+            raise ValueError(f"{field_name} must be an absolute path")
 
 
 class WorkerStatus(str, Enum):

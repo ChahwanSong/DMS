@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Awaitable, Iterable, Sequence
 
-import pytest
 import uvicorn
 
 from dms_master.app import app, get_master
@@ -47,8 +46,21 @@ def ensure_redis_available(master: DMSMaster) -> None:
         raise RuntimeError(f"Redis dependency check failed: {exc}") from exc
 
 
-def run_startup_checks(master: DMSMaster, test_paths: Iterable[str] | None = None) -> None:
-    """Run Redis availability and test-suite checks before serving traffic."""
+def _run_pytest(paths: Iterable[str]) -> int:
+    """Run pytest against the provided paths."""
+
+    from pytest import main as pytest_main
+
+    return pytest_main(list(paths))
+
+
+def run_startup_checks(
+    master: DMSMaster,
+    test_paths: Iterable[str] | None = None,
+    *,
+    run_tests: bool = False,
+) -> None:
+    """Run Redis availability and optional test-suite checks before serving traffic."""
 
     try:
         ensure_redis_available(master)
@@ -56,14 +68,15 @@ def run_startup_checks(master: DMSMaster, test_paths: Iterable[str] | None = Non
         print(f"Master startup aborted: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
-    paths = list(test_paths or DEFAULT_TEST_PATHS)
-    result = pytest.main(paths)
-    if result != 0:
-        print(
-            "Master startup aborted: control plane tests failed. See pytest output for details.",
-            file=sys.stderr,
-        )
-        raise SystemExit(result)
+    if run_tests:
+        paths = list(test_paths or DEFAULT_TEST_PATHS)
+        result = _run_pytest(paths)
+        if result != 0:
+            print(
+                "Master startup aborted: control plane tests failed. See pytest output for details.",
+                file=sys.stderr,
+            )
+            raise SystemExit(result)
 
 
 def main() -> None:
@@ -71,6 +84,11 @@ def main() -> None:
     parser.add_argument("--config", help="Path to YAML configuration", default=None)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--run-tests",
+        action="store_true",
+        help="Run control plane test suite before starting the server",
+    )
     args = parser.parse_args()
 
     # Preload master with configuration.
@@ -81,7 +99,7 @@ def main() -> None:
         print(f"Master startup aborted: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
-    run_startup_checks(master)
+    run_startup_checks(master, run_tests=args.run_tests)
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
