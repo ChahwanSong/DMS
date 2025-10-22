@@ -58,7 +58,8 @@ async def test_assignment_handler_success() -> None:
     assignment = Assignment(
         request_id="r1",
         worker_id="worker-a",
-        file_path="/tmp/file",
+        source_path="/tmp/source",
+        destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
         data_plane_iface="ib0",
@@ -82,7 +83,8 @@ async def test_assignment_handler_failure() -> None:
     assignment = Assignment(
         request_id="r1",
         worker_id="worker-a",
-        file_path="/tmp/file",
+        source_path="/tmp/source",
+        destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
         data_plane_iface="ib1",

@@ -58,16 +58,7 @@ def build_heartbeat_factory(
 async def _default_transfer_runner(assignment: Assignment) -> None:
     """Placeholder hook for integrating the C++ data plane."""
 
-    logging.info(
-        "Received assignment %s for %s -> %s (iface=%s address=%s | source_pool=%s destination_pool=%s)",
-        assignment.request_id,
-        assignment.file_path,
-        assignment.worker_id,
-        assignment.data_plane_iface,
-        assignment.data_plane_address,
-        assignment.source_worker_pool,
-        assignment.destination_worker_pool,
-    )
+    logging.info("Received assignment payload: %s", assignment.dict())
 
 
 def build_assignment_handler(

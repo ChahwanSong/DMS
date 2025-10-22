@@ -132,9 +132,16 @@ class SyncProgress(BaseModel):
 class Assignment(BaseModel):
     request_id: str
     worker_id: str
-    file_path: str
-    chunk_offset: int
-    chunk_size: int
+    source_path: str
+    destination_path: str
+    chunk_offset: int = Field(
+        ...,
+        description="Byte offset within the source object where this transfer chunk begins",
+    )
+    chunk_size: int = Field(
+        ...,
+        description="Number of bytes to transfer for this chunk",
+    )
     data_plane_iface: Optional[str] = None
     data_plane_address: Optional[str] = None
     source_worker_pool: List[str] = Field(
