@@ -105,13 +105,6 @@ def test_submit_and_assignments():
 def test_assignment_respects_storage_paths():
     async def scenario():
         master = DMSMaster(MasterConfig(), metadata_store=DummyMetadataStore())
-        request = SyncRequest(
-            request_id="req-storage",
-            source_path="/data/source/project",
-            destination_path="/data/destination",
-            file_list=["/data/source/project/file1"],
-        )
-        await master.submit_request(request)
         await master.worker_heartbeat(
             WorkerHeartbeat(
                 worker_id="worker-3",
@@ -132,6 +125,13 @@ def test_assignment_respects_storage_paths():
                 ],
             )
         )
+        request = SyncRequest(
+            request_id="req-storage",
+            source_path="/data/source/project",
+            destination_path="/data/destination",
+            file_list=["/data/source/project/file1"],
+        )
+        await master.submit_request(request)
 
         assignment = await master.next_assignment("worker-2", timeout=1.0)
         assert assignment is not None
@@ -159,3 +159,66 @@ def test_sync_request_requires_absolute_paths():
         )
 
     assert "destination_path must be an absolute path" in str(excinfo.value)
+
+
+def test_request_fails_when_worker_pools_missing():
+    async def scenario():
+        source_store = DummyMetadataStore()
+        master_no_workers = DMSMaster(MasterConfig(), metadata_store=source_store)
+        await master_no_workers.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="dest-only",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/cluster/dest"],
+                data_plane_endpoints=[
+                    DataPlaneEndpoint(iface="ib0", address="10.0.0.2"),
+                ],
+            )
+        )
+        request_no_source = SyncRequest(
+            request_id="req-no-source",
+            source_path="/cluster/source",
+            destination_path="/cluster/dest",
+        )
+
+        await master_no_workers.submit_request(request_no_source)
+        progress = await master_no_workers.query_progress("req-no-source")
+        assert progress is not None
+        assert progress.state == "FAILED"
+        assert progress.detail.get("master", "").startswith(
+            "No workers have access to source path"
+        )
+        result_entries = source_store.results.get("req-no-source", [])
+        assert result_entries and not result_entries[0].success
+        assert "source path" in result_entries[0].message
+
+        dest_store = DummyMetadataStore()
+        master_no_dest = DMSMaster(MasterConfig(), metadata_store=dest_store)
+        await master_no_dest.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="source-worker",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/cluster/source"],
+                data_plane_endpoints=[
+                    DataPlaneEndpoint(iface="ib0", address="10.0.0.1"),
+                ],
+            )
+        )
+        request_no_dest = SyncRequest(
+            request_id="req-no-dest",
+            source_path="/cluster/source",
+            destination_path="/cluster/dest",
+        )
+
+        await master_no_dest.submit_request(request_no_dest)
+        progress = await master_no_dest.query_progress("req-no-dest")
+        assert progress is not None
+        assert progress.state == "FAILED"
+        assert progress.detail.get("master", "").startswith(
+            "No workers have access to destination path"
+        )
+        dest_results = dest_store.results.get("req-no-dest", [])
+        assert dest_results and not dest_results[0].success
+        assert "destination path" in dest_results[0].message
+
+    asyncio.run(scenario())

@@ -80,6 +80,28 @@ class DMSMaster:
                 seen.add(worker_id)
         return ordered_pool
 
+    async def _fail_request(self, state: RequestState, message: str) -> None:
+        """Transition *state* to FAILED and persist the provided *message*."""
+
+        if state.progress.state == "FAILED":
+            return
+
+        self.logger.error("Request %s failed: %s", state.request.request_id, message)
+        state.progress.state = "FAILED"
+        state.progress.detail[_endpoint_key("master", None)] = message
+        state.pending_files.clear()
+        state.active_assignments.clear()
+
+        result = SyncResult(
+            request_id=state.request.request_id,
+            worker_id="master",
+            success=False,
+            message=message,
+        )
+        self._result_log[state.request.request_id].append(result)
+        await self.metadata.append_result(result)
+        await self.metadata.update_progress(state.progress)
+
     async def submit_request(self, request: SyncRequest) -> None:
         async with self._lock:
             if request.request_id in self._requests:
@@ -119,6 +141,22 @@ class DMSMaster:
                 destination_pool = self._worker_pool_for_path(
                     state.request.destination_path
                 )
+                if not source_pool:
+                    if self._worker_status:
+                        await self._fail_request(
+                            state,
+                            "No workers have access to source path "
+                            f"{state.request.source_path}",
+                        )
+                    continue
+                if not destination_pool:
+                    if self._worker_status:
+                        await self._fail_request(
+                            state,
+                            "No workers have access to destination path "
+                            f"{state.request.destination_path}",
+                        )
+                    continue
                 candidate_workers: Set[str] = set(source_pool)
                 if not candidate_workers:
                     continue

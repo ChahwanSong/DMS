@@ -47,6 +47,101 @@ python master_cli.py --config example_master.yml --host 127.0.0.1 --port 8888
 This launches the FastAPI master server bound to `127.0.0.1:8888` using the sample
 configuration.
 
+## Master API reference
+
+The master exposes a small FastAPI surface that both operators and worker agents use. The
+endpoints below are listed in the order they are typically exercised during a transfer.
+
+### `POST /sync`
+
+Queues a new sync request. The payload must match the `SyncRequest` schema. The master
+returns `202 Accepted` when the request is accepted for scheduling.
+
+```bash
+curl -X POST http://127.0.0.1:8888/sync \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "request_id": "demo-1",
+        "source_path": "/data/source",
+        "destination_path": "/data/dest",
+        "parallelism": 4,
+        "chunk_size_mb": 64,
+        "direction": "A_TO_B"
+      }'
+```
+
+### `GET /sync/{request_id}`
+
+Retrieves the latest `SyncProgress` document for the given request. It includes the current
+state, timestamps, transferred bytes, and any failure details recorded by the master or
+workers.
+
+```bash
+curl http://127.0.0.1:8888/sync/demo-1 | jq
+```
+
+### `GET /sync`
+
+Lists every tracked request with the same `SyncProgress` payload returned by the previous
+endpoint. Useful for dashboards or polling loops.
+
+```bash
+curl http://127.0.0.1:8888/sync | jq
+```
+
+### `DELETE /sync/{request_id}`
+
+Removes a completed or failed request from the master's in-memory cache and Redis metadata.
+Active transfers are cancelled, and any future progress queries return `404` after deletion.
+
+```bash
+curl -X DELETE http://127.0.0.1:8888/sync/demo-1
+```
+
+### `POST /workers/heartbeat`
+
+Agents POST their `WorkerHeartbeat` documents to advertise health, storage mounts, and data
+plane endpoints. The master responds with `{ "status": "ok" }` when the heartbeat is
+accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8888/workers/heartbeat \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "worker_id": "worker-a",
+        "status": "READY",
+        "storage_paths": ["/data/source", "/scratch"],
+        "data_plane_endpoints": [
+          {"iface": "ib0", "address": "192.168.100.10"}
+        ]
+      }'
+```
+
+### `POST /workers/{worker_id}/assignment`
+
+Agents poll this endpoint to fetch the next `Assignment`. When work is available, the master
+returns a JSON assignment document; otherwise the response body is `null` (HTTP 200).
+
+```bash
+curl -X POST http://127.0.0.1:8888/workers/worker-a/assignment | jq
+```
+
+### `POST /workers/result`
+
+Agents report chunk success or failure by posting `SyncResult` objects to this endpoint. The
+master acknowledges receipt with `{ "status": "ack" }`.
+
+```bash
+curl -X POST http://127.0.0.1:8888/workers/result \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "request_id": "demo-1",
+        "worker_id": "worker-a",
+        "success": true,
+        "message": "chunk complete"
+      }'
+```
+
 ## Running an agent locally
 
 Workers are defined in a shared YAML configuration. Choose a worker by ID when starting the
