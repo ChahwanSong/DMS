@@ -30,6 +30,10 @@ def _jsonable_payload(model: Any) -> Any:
     return _convert(model)
 
 
+class AgentCommunicationError(RuntimeError):
+    """Raised when the agent cannot communicate with the master."""
+
+
 class AgentClient:
     def __init__(
         self,
@@ -79,5 +83,9 @@ async def run_agent(
                 result = await assignment_handler(assignment)
                 await client.report_result(result)
             await asyncio.sleep(interval)
+    except httpx.HTTPError as exc:  # pragma: no cover - exercised via async tests
+        raise AgentCommunicationError(
+            f"Failed to communicate with master at {client.master_url}: {exc}"
+        ) from exc
     finally:
         await client.close()

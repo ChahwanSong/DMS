@@ -33,6 +33,9 @@ class DummyMetadataStore:
         self.requests.pop(request_id, None)
         self.results.pop(request_id, None)
 
+    async def health_check(self) -> None:
+        return None
+
 
 def test_submit_and_assignments():
     async def scenario():

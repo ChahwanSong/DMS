@@ -13,6 +13,7 @@ from .config import (
 
 __all__ = [
     "AgentClient",
+    "AgentCommunicationError",
     "AgentConfig",
     "AgentDataPlaneEndpoint",
     "AgentNetworkConfig",
@@ -22,7 +23,7 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name in {"AgentClient", "run_agent"}:
+    if name in {"AgentClient", "AgentCommunicationError", "run_agent"}:
         module = import_module(".client", __name__)
         return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
