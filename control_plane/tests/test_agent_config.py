@@ -19,10 +19,8 @@ workers:
     network:
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
-        - iface: ib0
-          address: 192.168.1.10
-        - iface: ib1
-          address: 192.168.1.11
+        - 192.168.1.10
+        - 192.168.1.11
   - worker_id: worker-2
     master_url: http://localhost:9000
     storage_paths:
@@ -31,15 +29,14 @@ workers:
     network:
       control_plane_address: 10.0.0.11
       data_plane_endpoints:
-        - iface: ib2
-          address: 192.168.1.12
+        - 192.168.1.12
 """
     )
     config = load_agent_config(cfg, "worker-2")
     assert config.worker_id == "worker-2"
     assert config.master_url == "http://localhost:9000"
     assert len(config.network.data_plane_endpoints) == 1
-    assert config.network.data_plane_endpoints[0].iface == "ib2"
+    assert config.network.data_plane_endpoints[0] == "192.168.1.12"
     assert config.storage_paths == ["/mnt/clusterB", "/scratch"]
 
 
@@ -88,8 +85,7 @@ workers:
     network:
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
-        - iface: ib0
-          address: 192.168.1.10
+        - 192.168.1.10
 """
     )
     with pytest.raises(KeyError):
@@ -106,8 +102,7 @@ workers:
     network:
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
-        - iface: ib0
-          address: 192.168.1.10
+        - 192.168.1.10
 """
     )
     with pytest.raises(ValueError):

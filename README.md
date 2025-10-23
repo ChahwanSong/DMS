@@ -92,10 +92,10 @@ redis:
 
 ### Running a worker agent locally
 
-Each agent has its own configuration describing which interfaces to use for control and data
+Each agent has its own configuration describing which addresses to use for control and data
 plane communication. The YAML below (shipped as `example_agent.yml`) binds control-plane
-traffic to `192.168.100.10` and advertises two InfiniBand adapters for the data plane. The master will
-load balance assignments across the advertised interfaces:
+traffic to `192.168.100.10` and advertises two InfiniBand addresses for the data plane. The master will
+load balance assignments across the advertised addresses:
 
 ```yaml
 master_url: http://127.0.0.1:8888
@@ -103,10 +103,8 @@ worker_id: worker-a
 network:
   control_plane_address: 10.0.0.10
   data_plane_endpoints:
-    - iface: ib0
-      address: 192.168.100.10
-    - iface: ib1
-      address: 192.168.100.11
+    - 192.168.100.10
+    - 192.168.100.11
 ```
 
 Start the bundled asyncio worker process from the `control_plane` directory. The CLI loads

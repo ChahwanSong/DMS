@@ -6,7 +6,6 @@ from typing import Any
 
 from .config import (
     AgentConfig,
-    AgentDataPlaneEndpoint,
     AgentNetworkConfig,
     load_agent_config,
 )
@@ -15,7 +14,6 @@ __all__ = [
     "AgentClient",
     "AgentCommunicationError",
     "AgentConfig",
-    "AgentDataPlaneEndpoint",
     "AgentNetworkConfig",
     "load_agent_config",
     "run_agent",

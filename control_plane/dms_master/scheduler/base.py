@@ -11,12 +11,11 @@ class WorkerInterface:
     """Identifies a worker's data-plane interface advertised to the master."""
 
     worker_id: str
-    iface: str
     address: str
 
     @property
     def key(self) -> str:
-        return f"{self.worker_id}::{self.iface}"
+        return f"{self.worker_id}::{self.address}"
 
 
 class SchedulerPolicy(ABC):

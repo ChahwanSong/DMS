@@ -9,15 +9,9 @@ import yaml
 
 
 @dataclass
-class AgentDataPlaneEndpoint:
-    iface: str
-    address: str
-
-
-@dataclass
 class AgentNetworkConfig:
     control_plane_address: str
-    data_plane_endpoints: List[AgentDataPlaneEndpoint]
+    data_plane_endpoints: List[str]
 
 
 @dataclass
@@ -64,7 +58,19 @@ def _build_network(network_data: Optional[Dict[str, Any]]) -> AgentNetworkConfig
         raise ValueError(
             "Agent network configuration requires at least one data plane endpoint"
         )
-    endpoints = [AgentDataPlaneEndpoint(**item) for item in endpoints_raw]
+    endpoints: list[str] = []
+    for item in endpoints_raw:
+        if isinstance(item, str):
+            endpoints.append(item)
+        elif isinstance(item, Mapping):
+            address = item.get("address")
+            if not isinstance(address, str):
+                raise ValueError(
+                    "Each data plane endpoint mapping must include an address string"
+                )
+            endpoints.append(address)
+        else:
+            raise ValueError("Each data plane endpoint must be a string or mapping with address")
     return AgentNetworkConfig(
         control_plane_address=network_data["control_plane_address"],
         data_plane_endpoints=endpoints,

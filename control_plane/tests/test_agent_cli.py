@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("yaml")
 
 from control_plane import agent_cli
-from dms_agent.config import AgentConfig, AgentDataPlaneEndpoint, AgentNetworkConfig
+from dms_agent.config import AgentConfig, AgentNetworkConfig
 from dms_master.models import Assignment, WorkerStatus
 
 
@@ -18,8 +18,8 @@ def _make_config() -> AgentConfig:
     network = AgentNetworkConfig(
         control_plane_address="10.0.0.10",
         data_plane_endpoints=[
-            AgentDataPlaneEndpoint(iface="ib0", address="192.168.0.10"),
-            AgentDataPlaneEndpoint(iface="ib1", address="192.168.0.11"),
+            "192.168.0.10",
+            "192.168.0.11",
         ],
     )
     return AgentConfig(
@@ -61,7 +61,6 @@ async def test_assignment_handler_success() -> None:
         destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
-        data_plane_iface="ib0",
         data_plane_address="192.168.0.10",
     )
 
@@ -86,7 +85,6 @@ async def test_assignment_handler_failure() -> None:
         destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
-        data_plane_iface="ib1",
         data_plane_address="192.168.0.11",
     )
 

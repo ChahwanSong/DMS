@@ -60,8 +60,8 @@ def test_submit_and_assignments():
                 status=WorkerStatus.IDLE,
                 storage_paths=["/home/clusterA", "/home/clusterB"],
                 data_plane_endpoints=[
-                    DataPlaneEndpoint(iface="ib0", address="192.168.1.10"),
-                    DataPlaneEndpoint(iface="ib1", address="192.168.1.11"),
+                    DataPlaneEndpoint(address="192.168.1.10"),
+                    DataPlaneEndpoint(address="192.168.1.11"),
                 ],
             )
         )
@@ -69,7 +69,10 @@ def test_submit_and_assignments():
         assignment2 = await master.next_assignment("worker-1", timeout=1.0)
         assert assignment1 is not None
         assert assignment2 is not None
-        assert {assignment1.data_plane_iface, assignment2.data_plane_iface} == {"ib0", "ib1"}
+        assert {
+            assignment1.data_plane_address,
+            assignment2.data_plane_address,
+        } == {"192.168.1.10", "192.168.1.11"}
         assert assignment1.source_worker_pool == ["worker-1"]
         assert assignment1.destination_worker_pool == ["worker-1"]
         await master.report_result(
@@ -78,7 +81,7 @@ def test_submit_and_assignments():
                 worker_id="worker-1",
                 success=True,
                 message="done",
-                data_plane_iface=assignment1.data_plane_iface,
+                data_plane_address=assignment1.data_plane_address,
             )
         )
         await master.report_result(
@@ -87,15 +90,15 @@ def test_submit_and_assignments():
                 worker_id="worker-1",
                 success=True,
                 message="done",
-                data_plane_iface=assignment2.data_plane_iface,
+                data_plane_address=assignment2.data_plane_address,
             )
         )
         progress = await master.query_progress("req-1")
         assert progress is not None
         assert progress.state == "COMPLETED"
         assert set(progress.detail.keys()) == {
-            f"worker-1::{assignment1.data_plane_iface}",
-            f"worker-1::{assignment2.data_plane_iface}",
+            f"worker-1::{assignment1.data_plane_address}",
+            f"worker-1::{assignment2.data_plane_address}",
         }
 
     asyncio.run(scenario())
@@ -117,7 +120,7 @@ def test_assignment_progress_and_reassign():
                 worker_id="worker-a",
                 status=WorkerStatus.IDLE,
                 storage_paths=["/data", "/data/source", "/data/dest"],
-                data_plane_endpoints=[DataPlaneEndpoint(iface="ib0", address="10.0.0.1")],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.1")],
             )
         )
         await master.worker_heartbeat(
@@ -125,7 +128,7 @@ def test_assignment_progress_and_reassign():
                 worker_id="worker-b",
                 status=WorkerStatus.IDLE,
                 storage_paths=["/data", "/data/source", "/data/dest"],
-                data_plane_endpoints=[DataPlaneEndpoint(iface="ib1", address="10.0.0.2")],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.2")],
             )
         )
 
@@ -135,7 +138,7 @@ def test_assignment_progress_and_reassign():
         progress = await master.query_progress("req-reassign")
         assert progress is not None
         assert progress.state == "PROGRESS"
-        detail_key = f"worker-a::{assignment.data_plane_iface}"
+        detail_key = f"worker-a::{assignment.data_plane_address}"
         assert progress.detail[detail_key] == "PROGRESS"
 
         await master.report_result(
@@ -144,7 +147,7 @@ def test_assignment_progress_and_reassign():
                 worker_id="worker-a",
                 success=False,
                 message="transfer failed",
-                data_plane_iface=assignment.data_plane_iface,
+                data_plane_address=assignment.data_plane_address,
             )
         )
 
@@ -178,7 +181,7 @@ def test_assignment_respects_storage_paths():
                 status=WorkerStatus.IDLE,
                 storage_paths=["/data/destination"],
                 data_plane_endpoints=[
-                    DataPlaneEndpoint(iface="ib2", address="192.168.10.3"),
+                    DataPlaneEndpoint(address="192.168.10.3"),
                 ],
             )
         )
@@ -188,7 +191,7 @@ def test_assignment_respects_storage_paths():
                 status=WorkerStatus.IDLE,
                 storage_paths=["/data/source"],
                 data_plane_endpoints=[
-                    DataPlaneEndpoint(iface="ib1", address="192.168.10.2"),
+                    DataPlaneEndpoint(address="192.168.10.2"),
                 ],
             )
         )
@@ -238,7 +241,7 @@ def test_request_fails_when_worker_pools_missing():
                 status=WorkerStatus.IDLE,
                 storage_paths=["/cluster/dest"],
                 data_plane_endpoints=[
-                    DataPlaneEndpoint(iface="ib0", address="10.0.0.2"),
+                    DataPlaneEndpoint(address="10.0.0.2"),
                 ],
             )
         )
@@ -267,7 +270,7 @@ def test_request_fails_when_worker_pools_missing():
                 status=WorkerStatus.IDLE,
                 storage_paths=["/cluster/source"],
                 data_plane_endpoints=[
-                    DataPlaneEndpoint(iface="ib0", address="10.0.0.1"),
+                    DataPlaneEndpoint(address="10.0.0.1"),
                 ],
             )
         )

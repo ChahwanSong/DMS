@@ -93,7 +93,6 @@ class WorkerStatus(str, Enum):
 
 
 class DataPlaneEndpoint(BaseModel):
-    iface: str
     address: str
 
 
@@ -132,7 +131,6 @@ class Assignment(BaseModel):
         ...,
         description="Number of bytes to transfer for this chunk",
     )
-    data_plane_iface: Optional[str] = None
     data_plane_address: Optional[str] = None
     source_worker_pool: List[str] = Field(
         default_factory=list,
@@ -150,7 +148,6 @@ class SyncResult(BaseModel):
     success: bool
     message: str = ""
     completed_at: datetime = Field(default_factory=datetime.utcnow)
-    data_plane_iface: Optional[str] = None
     data_plane_address: Optional[str] = None
 
 

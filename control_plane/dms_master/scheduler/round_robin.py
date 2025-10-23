@@ -15,7 +15,7 @@ class RoundRobinPolicy(SchedulerPolicy):
     def select_workers(
         self, workers: Iterable[WorkerInterface], required: int
     ) -> List[WorkerInterface]:
-        active = sorted(workers, key=lambda w: (w.worker_id, w.iface, w.address))
+        active = sorted(workers, key=lambda w: (w.worker_id, w.address))
         if not active:
             return []
 
