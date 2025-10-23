@@ -16,7 +16,6 @@ from dms_master.models import Assignment, WorkerStatus
 
 def _make_config() -> AgentConfig:
     network = AgentNetworkConfig(
-        control_plane_iface="eth0",
         control_plane_address="10.0.0.10",
         data_plane_endpoints=[
             AgentDataPlaneEndpoint(iface="ib0", address="192.168.0.10"),

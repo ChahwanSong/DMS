@@ -5,7 +5,6 @@ workers:
       - /home/gpu1
       - /home/cpu1
     network:
-      control_plane_iface: eth0
       control_plane_address: 192.168.65.4
       data_plane_endpoints:
         - iface: eth0
@@ -15,7 +14,6 @@ workers:
       - /home/gpu1
       - /scratch
     network:
-      control_plane_iface: eth0
       control_plane_address: 192.168.65.5
       data_plane_endpoints:
         - iface: eth0

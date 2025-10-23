@@ -46,7 +46,6 @@ def build_heartbeat_factory(
         return WorkerHeartbeat(
             worker_id=config.worker_id,
             status=status_tracker.status,
-            control_plane_iface=config.network.control_plane_iface,
             control_plane_address=config.network.control_plane_address,
             data_plane_endpoints=endpoints,
             storage_paths=config.storage_paths,
