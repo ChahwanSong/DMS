@@ -64,7 +64,7 @@ curl -X POST http://127.0.0.1:8888/sync \
         "request_id": "demo-1",
         "source_path": "/data/source",
         "destination_path": "/data/dest",
-        "chunk_size_mb": 64,
+        "chunk_size_mb": 64
       }'
 ```
 
@@ -107,7 +107,7 @@ curl -X POST http://127.0.0.1:8888/workers/heartbeat \
   -H 'Content-Type: application/json' \
   -d '{
         "worker_id": "worker-a",
-        "status": "READY",
+        "status": "IDLE",
         "storage_paths": ["/data/source", "/scratch"],
         "data_plane_endpoints": [
           {"iface": "ib0", "address": "192.168.100.10"}
