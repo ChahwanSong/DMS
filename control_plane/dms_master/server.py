@@ -29,6 +29,7 @@ class RequestState:
     progress: SyncProgress
     pending_files: Deque[str]
     active_assignments: Dict[str, Assignment]
+    preferred_worker: Optional[str] = None
 
 
 def _endpoint_key(worker_id: str, iface: Optional[str]) -> str:
@@ -157,6 +158,16 @@ class DMSMaster:
                         )
                     continue
                 candidate_workers: Set[str] = set(source_pool)
+                if state.preferred_worker:
+                    if state.preferred_worker in candidate_workers:
+                        candidate_workers = {state.preferred_worker}
+                    else:
+                        self.logger.warning(
+                            "Preferred worker %s unavailable for request %s",
+                            state.preferred_worker,
+                            state.request.request_id,
+                        )
+                        continue
                 if not candidate_workers:
                     continue
 
@@ -225,7 +236,83 @@ class DMSMaster:
         if assignment.worker_id != worker_id:
             await self._assignment_queue.put(assignment)
             return None
+        progress_to_update: Optional[SyncProgress] = None
+        async with self._lock:
+            state = self._requests.get(assignment.request_id)
+            if state:
+                state.progress.updated_at = datetime.utcnow()
+                if state.progress.state == "QUEUED":
+                    state.progress.state = "PROGRESS"
+                detail_key = _endpoint_key(assignment.worker_id, assignment.data_plane_iface)
+                state.progress.detail[detail_key] = "PROGRESS"
+                progress_to_update = state.progress
+        if progress_to_update:
+            await self.metadata.update_progress(progress_to_update)
         return assignment
+
+    async def _drain_assignments_for_request(self, request_id: str) -> None:
+        """Remove any queued assignments belonging to *request_id*."""
+
+        retained: list[Assignment] = []
+        while True:
+            try:
+                queued = self._assignment_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if queued.request_id != request_id:
+                retained.append(queued)
+        for assignment in retained:
+            await self._assignment_queue.put(assignment)
+
+    async def reassign_request(self, request_id: str, worker_id: str) -> None:
+        async with self._lock:
+            state = self._requests.get(request_id)
+            if not state:
+                raise ValueError(f"Request {request_id} not found")
+            if state.progress.state not in {"QUEUED", "FAILED"}:
+                raise ValueError(
+                    "Reassignment is only supported for requests in QUEUED or FAILED state"
+                )
+            if worker_id not in self._worker_status:
+                raise ValueError(f"Worker {worker_id} is not registered with the master")
+            source_pool = self._worker_pool_for_path(state.request.source_path)
+            if worker_id not in source_pool:
+                raise ValueError(
+                    f"Worker {worker_id} does not have access to {state.request.source_path}"
+                )
+
+            reassigned_sources = [assignment.source_path for assignment in state.active_assignments.values()]
+            state.active_assignments.clear()
+            for path in reversed(reassigned_sources):
+                state.pending_files.appendleft(path)
+
+            if not state.pending_files:
+                state.pending_files = deque(
+                    state.request.file_list or [state.request.source_path]
+                )
+
+            await self._drain_assignments_for_request(request_id)
+
+            state.preferred_worker = worker_id
+            state.progress.state = "QUEUED"
+            state.progress.updated_at = datetime.utcnow()
+            detail_key = _endpoint_key("master", None)
+            if detail_key in state.progress.detail and state.progress.detail[detail_key].startswith(
+                "No workers have access"
+            ):
+                state.progress.detail.pop(detail_key)
+            progress_to_update = state.progress
+
+        await self.metadata.update_progress(progress_to_update)
+        await self._schedule_work()
+
+    async def list_requests_for_worker(self, worker_id: str) -> List[SyncProgress]:
+        async with self._lock:
+            results: list[SyncProgress] = []
+            for state in self._requests.values():
+                if any(assignment.worker_id == worker_id for assignment in state.active_assignments.values()):
+                    results.append(state.progress)
+            return results
 
     async def report_result(self, result: SyncResult) -> None:
         async with self._lock:

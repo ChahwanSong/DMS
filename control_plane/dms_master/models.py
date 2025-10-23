@@ -153,3 +153,7 @@ class SyncResult(BaseModel):
     completed_at: datetime = Field(default_factory=datetime.utcnow)
     data_plane_iface: Optional[str] = None
     data_plane_address: Optional[str] = None
+
+
+class ReassignRequest(BaseModel):
+    worker_id: str

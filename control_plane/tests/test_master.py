@@ -101,6 +101,74 @@ def test_submit_and_assignments():
     asyncio.run(scenario())
 
 
+def test_assignment_progress_and_reassign():
+    async def scenario():
+        store = DummyMetadataStore()
+        master = DMSMaster(MasterConfig(), metadata_store=store)
+        request = SyncRequest(
+            request_id="req-reassign",
+            source_path="/data/source",
+            destination_path="/data/dest",
+            file_list=["/data/source/file1"],
+        )
+        await master.submit_request(request)
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-a",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(iface="ib0", address="10.0.0.1")],
+            )
+        )
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-b",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(iface="ib1", address="10.0.0.2")],
+            )
+        )
+
+        assignment = await master.next_assignment("worker-a", timeout=1.0)
+        assert assignment is not None
+
+        progress = await master.query_progress("req-reassign")
+        assert progress is not None
+        assert progress.state == "PROGRESS"
+        detail_key = f"worker-a::{assignment.data_plane_iface}"
+        assert progress.detail[detail_key] == "PROGRESS"
+
+        await master.report_result(
+            SyncResult(
+                request_id="req-reassign",
+                worker_id="worker-a",
+                success=False,
+                message="transfer failed",
+                data_plane_iface=assignment.data_plane_iface,
+            )
+        )
+
+        failed_progress = await master.query_progress("req-reassign")
+        assert failed_progress is not None
+        assert failed_progress.state == "FAILED"
+
+        await master.reassign_request("req-reassign", "worker-b")
+
+        requeued_progress = await master.query_progress("req-reassign")
+        assert requeued_progress is not None
+        assert requeued_progress.state == "QUEUED"
+
+        reassigned = await master.next_assignment("worker-b", timeout=1.0)
+        assert reassigned is not None
+        assert reassigned.worker_id == "worker-b"
+
+        worker_requests = await master.list_requests_for_worker("worker-b")
+        assert any(progress.request_id == "req-reassign" for progress in worker_requests)
+        assert await master.next_assignment("worker-a", timeout=0.1) is None
+
+    asyncio.run(scenario())
+
+
 def test_assignment_respects_storage_paths():
     async def scenario():
         master = DMSMaster(MasterConfig(), metadata_store=DummyMetadataStore())

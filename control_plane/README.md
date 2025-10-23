@@ -71,8 +71,8 @@ curl -X POST http://127.0.0.1:8888/sync \
 ### `GET /sync/{request_id}`
 
 Retrieves the latest `SyncProgress` document for the given request. It includes the current
-state, timestamps, transferred bytes, and any failure details recorded by the master or
-workers.
+state (`QUEUED`, `PROGRESS`, `COMPLETED`, or `FAILED`), timestamps, transferred bytes, and any
+failure details recorded by the master or workers.
 
 ```bash
 curl http://127.0.0.1:8888/sync/demo-1 | jq
@@ -118,10 +118,34 @@ curl -X POST http://127.0.0.1:8888/workers/heartbeat \
 ### `POST /workers/{worker_id}/assignment`
 
 Agents poll this endpoint to fetch the next `Assignment`. When work is available, the master
-returns a JSON assignment document; otherwise the response body is `null` (HTTP 200).
+returns a JSON assignment document; otherwise the response body is `null` (HTTP 200). Once the
+assignment is claimed, the related request transitions to the `PROGRESS` state and the
+`SyncProgress.detail` entry for that worker is updated to reflect an in-flight transfer.
 
 ```bash
 curl -X POST http://127.0.0.1:8888/workers/worker-a/assignment | jq
+```
+
+### `POST /sync/{request_id}/reassign`
+
+Re-queues a request for a different worker when its progress is currently `QUEUED` or `FAILED`.
+Provide a JSON body specifying the new worker ID. The master clears any pending assignments for
+the request, pins future scheduling decisions to the requested worker, and re-schedules
+remaining files.
+
+```bash
+curl -X POST http://127.0.0.1:8888/sync/demo-1/reassign \
+  -H 'Content-Type: application/json' \
+  -d '{"worker_id": "worker-b"}'
+```
+
+### `GET /workers/{worker_id}/requests`
+
+Lists every request currently assigned to a worker. Each entry is the same `SyncProgress`
+document returned by the `/sync` endpoints and includes the latest state and detail map.
+
+```bash
+curl http://127.0.0.1:8888/workers/worker-a/requests | jq
 ```
 
 ### `POST /workers/result`

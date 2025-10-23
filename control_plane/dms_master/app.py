@@ -8,7 +8,14 @@ from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
 
 from .config import MasterConfig, load_config
-from .models import Assignment, SyncProgress, SyncRequest, SyncResult, WorkerHeartbeat
+from .models import (
+    Assignment,
+    ReassignRequest,
+    SyncProgress,
+    SyncRequest,
+    SyncResult,
+    WorkerHeartbeat,
+)
 from .server import DMSMaster
 
 app = FastAPI(title="DMS Master", version="0.1.0")
@@ -65,6 +72,23 @@ async def report_result(result: SyncResult, master: DMSMaster = Depends(master_d
 async def delete_request(request_id: str, master: DMSMaster = Depends(master_dependency)) -> dict:
     await master.forget_request(request_id)
     return {"status": "deleted"}
+
+
+@app.post("/sync/{request_id}/reassign")
+async def reassign_request(
+    request_id: str,
+    payload: ReassignRequest,
+    master: DMSMaster = Depends(master_dependency),
+) -> dict:
+    await master.reassign_request(request_id, payload.worker_id)
+    return {"status": "requeued", "request_id": request_id, "worker_id": payload.worker_id}
+
+
+@app.get("/workers/{worker_id}/requests", response_model=list[SyncProgress])
+async def list_worker_requests(
+    worker_id: str, master: DMSMaster = Depends(master_dependency)
+) -> list[SyncProgress]:
+    return await master.list_requests_for_worker(worker_id)
 
 
 @app.on_event("startup")
