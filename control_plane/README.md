@@ -110,7 +110,7 @@ curl -X POST http://127.0.0.1:8888/workers/heartbeat \
         "status": "IDLE",
         "storage_paths": ["/data/source", "/scratch"],
         "data_plane_endpoints": [
-          {"iface": "ib0", "address": "192.168.100.10"}
+          "192.168.100.10"
         ]
       }'
 ```

@@ -32,9 +32,9 @@ class RequestState:
     preferred_worker: Optional[str] = None
 
 
-def _endpoint_key(worker_id: str, iface: Optional[str]) -> str:
-    if iface:
-        return f"{worker_id}::{iface}"
+def _endpoint_key(worker_id: str, address: Optional[str]) -> str:
+    if address:
+        return f"{worker_id}::{address}"
     return worker_id
 
 
@@ -180,7 +180,6 @@ class DMSMaster:
                     for endpoint in heartbeat.data_plane_endpoints:
                         interface = WorkerInterface(
                             worker_id=worker_id,
-                            iface=endpoint.iface,
                             address=endpoint.address,
                         )
                         if interface.key in busy_endpoints:
@@ -206,7 +205,6 @@ class DMSMaster:
                         destination_path=state.request.destination_path,
                         chunk_offset=0,
                         chunk_size=state.request.chunk_size_mb * 1024 * 1024,
-                        data_plane_iface=interface.iface,
                         data_plane_address=interface.address,
                         source_worker_pool=source_pool,
                         destination_worker_pool=destination_pool,
@@ -218,7 +216,7 @@ class DMSMaster:
                         "Assigned %s to worker %s (%s) for request %s",
                         source_path,
                         interface.worker_id,
-                        interface.iface,
+                        interface.address,
                         state.request.request_id,
                     )
 
@@ -243,7 +241,7 @@ class DMSMaster:
                 state.progress.updated_at = datetime.utcnow()
                 if state.progress.state == "QUEUED":
                     state.progress.state = "PROGRESS"
-                detail_key = _endpoint_key(assignment.worker_id, assignment.data_plane_iface)
+                detail_key = _endpoint_key(assignment.worker_id, assignment.data_plane_address)
                 state.progress.detail[detail_key] = "PROGRESS"
                 progress_to_update = state.progress
         if progress_to_update:
@@ -322,7 +320,7 @@ class DMSMaster:
                 return
             self._result_log[result.request_id].append(result)
             state.progress.updated_at = datetime.utcnow()
-            detail_key = _endpoint_key(result.worker_id, result.data_plane_iface)
+            detail_key = _endpoint_key(result.worker_id, result.data_plane_address)
             if result.success:
                 state.progress.detail[detail_key] = "COMPLETED"
             else:
@@ -332,10 +330,10 @@ class DMSMaster:
                     "Request %s failed on worker %s (%s): %s",
                     result.request_id,
                     result.worker_id,
-                    result.data_plane_iface or "unknown-iface",
+                    result.data_plane_address or "unknown-address",
                     result.message,
                 )
-            assignment_key = _endpoint_key(result.worker_id, result.data_plane_iface)
+            assignment_key = _endpoint_key(result.worker_id, result.data_plane_address)
             if assignment_key not in state.active_assignments:
                 # Fallback to worker_id only if provided interface is missing
                 assignment_key = result.worker_id

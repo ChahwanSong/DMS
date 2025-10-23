@@ -7,8 +7,8 @@ workers:
     network:
       control_plane_address: 192.168.65.4
       data_plane_endpoints:
-        - iface: eth0
-          address: 192.168.65.4
+        - 192.168.65.4
+        - 10.10.0.4
   - worker_id: worker-b
     storage_paths:
       - /home/gpu1
@@ -16,5 +16,5 @@ workers:
     network:
       control_plane_address: 192.168.65.5
       data_plane_endpoints:
-        - iface: eth0
-          address: 192.168.65.5
+        - 192.168.65.5
+        - 10.10.0.5

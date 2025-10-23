@@ -38,7 +38,7 @@ def build_heartbeat_factory(
     """Create a heartbeat factory that reflects the latest worker status."""
 
     endpoints = [
-        DataPlaneEndpoint(iface=endpoint.iface, address=endpoint.address)
+        DataPlaneEndpoint(address=endpoint)
         for endpoint in config.network.data_plane_endpoints
     ]
 
@@ -81,7 +81,6 @@ def build_assignment_handler(
                 worker_id=config.worker_id,
                 success=False,
                 message=str(exc),
-                data_plane_iface=assignment.data_plane_iface,
                 data_plane_address=assignment.data_plane_address,
             )
         finally:
@@ -92,7 +91,6 @@ def build_assignment_handler(
             worker_id=config.worker_id,
             success=True,
             message="Transfer completed",
-            data_plane_iface=assignment.data_plane_iface,
             data_plane_address=assignment.data_plane_address,
         )
 
