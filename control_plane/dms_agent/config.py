@@ -16,7 +16,6 @@ class AgentDataPlaneEndpoint:
 
 @dataclass
 class AgentNetworkConfig:
-    control_plane_iface: str
     control_plane_address: str
     data_plane_endpoints: List[AgentDataPlaneEndpoint]
 
@@ -54,7 +53,7 @@ def _select_worker_config(workers: Iterable[Dict[str, Any]], worker_id: str) -> 
 def _build_network(network_data: Optional[Dict[str, Any]]) -> AgentNetworkConfig:
     if not network_data:
         raise ValueError("Agent configuration requires a network section for each worker")
-    required_fields = {"control_plane_iface", "control_plane_address", "data_plane_endpoints"}
+    required_fields = {"control_plane_address", "data_plane_endpoints"}
     missing = required_fields - network_data.keys()
     if missing:
         raise ValueError(
@@ -67,7 +66,6 @@ def _build_network(network_data: Optional[Dict[str, Any]]) -> AgentNetworkConfig
         )
     endpoints = [AgentDataPlaneEndpoint(**item) for item in endpoints_raw]
     return AgentNetworkConfig(
-        control_plane_iface=network_data["control_plane_iface"],
         control_plane_address=network_data["control_plane_address"],
         data_plane_endpoints=endpoints,
     )

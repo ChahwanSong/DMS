@@ -13,7 +13,6 @@ except ModuleNotFoundError:  # pragma: no cover - fallback when PyYAML unavailab
 
 @dataclass
 class NetworkInterfaceConfig:
-    control_plane_iface: str
     data_plane_iface: str | None = None
 
 

@@ -83,8 +83,6 @@ Example master configuration (`example_master.yml`):
 
 ```yaml
 scheduler: round_robin
-network:
-  control_plane_iface: eth0
 worker_heartbeat_timeout: 45.0
 redis:
   host: localhost
@@ -96,14 +94,13 @@ redis:
 
 Each agent has its own configuration describing which interfaces to use for control and data
 plane communication. The YAML below (shipped as `example_agent.yml`) binds control-plane
-traffic to `eth0` and advertises two InfiniBand adapters for the data plane. The master will
+traffic to `192.168.100.10` and advertises two InfiniBand adapters for the data plane. The master will
 load balance assignments across the advertised interfaces:
 
 ```yaml
 master_url: http://127.0.0.1:8888
 worker_id: worker-a
 network:
-  control_plane_iface: eth0
   control_plane_address: 10.0.0.10
   data_plane_endpoints:
     - iface: ib0

@@ -17,7 +17,6 @@ workers:
     storage_paths:
       - /mnt/clusterA
     network:
-      control_plane_iface: eth0
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
         - iface: ib0
@@ -30,7 +29,6 @@ workers:
       - /mnt/clusterB
       - /scratch
     network:
-      control_plane_iface: eth1
       control_plane_address: 10.0.0.11
       data_plane_endpoints:
         - iface: ib2
@@ -40,7 +38,6 @@ workers:
     config = load_agent_config(cfg, "worker-2")
     assert config.worker_id == "worker-2"
     assert config.master_url == "http://localhost:9000"
-    assert config.network.control_plane_iface == "eth1"
     assert len(config.network.data_plane_endpoints) == 1
     assert config.network.data_plane_endpoints[0].iface == "ib2"
     assert config.storage_paths == ["/mnt/clusterB", "/scratch"]
@@ -71,7 +68,6 @@ workers:
     storage_paths:
       - /mnt/storage
     network:
-      control_plane_iface: eth0
       control_plane_address: 10.0.0.10
       data_plane_endpoints: []
 """
@@ -90,7 +86,6 @@ workers:
     storage_paths:
       - /mnt/storage
     network:
-      control_plane_iface: eth0
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
         - iface: ib0
@@ -109,7 +104,6 @@ master_url: http://localhost:8000
 workers:
   - worker_id: worker-1
     network:
-      control_plane_iface: eth0
       control_plane_address: 10.0.0.10
       data_plane_endpoints:
         - iface: ib0
