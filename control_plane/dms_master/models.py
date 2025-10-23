@@ -131,7 +131,6 @@ class Assignment(BaseModel):
         ...,
         description="Number of bytes to transfer for this chunk",
     )
-    data_plane_address: Optional[str] = None
     source_worker_pool: List[str] = Field(
         default_factory=list,
         description="Workers that can access the sync source",

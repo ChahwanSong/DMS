@@ -205,7 +205,6 @@ class DMSMaster:
                         destination_path=state.request.destination_path,
                         chunk_offset=0,
                         chunk_size=state.request.chunk_size_mb * 1024 * 1024,
-                        data_plane_address=interface.address,
                         source_worker_pool=source_pool,
                         destination_worker_pool=destination_pool,
                     )
@@ -241,7 +240,11 @@ class DMSMaster:
                 state.progress.updated_at = datetime.utcnow()
                 if state.progress.state == "QUEUED":
                     state.progress.state = "PROGRESS"
-                detail_key = _endpoint_key(assignment.worker_id, assignment.data_plane_address)
+                detail_key = _endpoint_key(assignment.worker_id, None)
+                for key, active in state.active_assignments.items():
+                    if active is assignment:
+                        detail_key = key
+                        break
                 state.progress.detail[detail_key] = "PROGRESS"
                 progress_to_update = state.progress
         if progress_to_update:
@@ -321,6 +324,11 @@ class DMSMaster:
             self._result_log[result.request_id].append(result)
             state.progress.updated_at = datetime.utcnow()
             detail_key = _endpoint_key(result.worker_id, result.data_plane_address)
+            if result.data_plane_address is None:
+                for key, active in state.active_assignments.items():
+                    if active.worker_id == result.worker_id:
+                        detail_key = key
+                        break
             if result.success:
                 state.progress.detail[detail_key] = "COMPLETED"
             else:
@@ -335,8 +343,12 @@ class DMSMaster:
                 )
             assignment_key = _endpoint_key(result.worker_id, result.data_plane_address)
             if assignment_key not in state.active_assignments:
-                # Fallback to worker_id only if provided interface is missing
-                assignment_key = result.worker_id
+                for key, active in state.active_assignments.items():
+                    if active.worker_id == result.worker_id:
+                        assignment_key = key
+                        break
+                else:
+                    assignment_key = result.worker_id
             state.active_assignments.pop(assignment_key, None)
             if not state.pending_files and not state.active_assignments:
                 if state.progress.state != "FAILED":
