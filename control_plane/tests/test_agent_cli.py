@@ -61,7 +61,6 @@ async def test_assignment_handler_success() -> None:
         destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
-        data_plane_address="192.168.0.10",
     )
 
     result = await handler(assignment)
@@ -85,7 +84,6 @@ async def test_assignment_handler_failure() -> None:
         destination_path="/tmp/destination",
         chunk_offset=0,
         chunk_size=1024,
-        data_plane_address="192.168.0.11",
     )
 
     result = await handler(assignment)

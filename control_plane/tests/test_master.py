@@ -70,9 +70,9 @@ def test_submit_and_assignments():
         assert assignment1 is not None
         assert assignment2 is not None
         assert {
-            assignment1.data_plane_address,
-            assignment2.data_plane_address,
-        } == {"192.168.1.10", "192.168.1.11"}
+            assignment1.source_path,
+            assignment2.source_path,
+        } == {"/home/clusterA/foo/file1", "/home/clusterA/foo/file2"}
         assert assignment1.source_worker_pool == ["worker-1"]
         assert assignment1.destination_worker_pool == ["worker-1"]
         await master.report_result(
@@ -81,7 +81,7 @@ def test_submit_and_assignments():
                 worker_id="worker-1",
                 success=True,
                 message="done",
-                data_plane_address=assignment1.data_plane_address,
+                data_plane_address=None,
             )
         )
         await master.report_result(
@@ -90,15 +90,15 @@ def test_submit_and_assignments():
                 worker_id="worker-1",
                 success=True,
                 message="done",
-                data_plane_address=assignment2.data_plane_address,
+                data_plane_address=None,
             )
         )
         progress = await master.query_progress("req-1")
         assert progress is not None
         assert progress.state == "COMPLETED"
         assert set(progress.detail.keys()) == {
-            f"worker-1::{assignment1.data_plane_address}",
-            f"worker-1::{assignment2.data_plane_address}",
+            "worker-1::192.168.1.10",
+            "worker-1::192.168.1.11",
         }
 
     asyncio.run(scenario())
@@ -138,7 +138,8 @@ def test_assignment_progress_and_reassign():
         progress = await master.query_progress("req-reassign")
         assert progress is not None
         assert progress.state == "PROGRESS"
-        detail_key = f"worker-a::{assignment.data_plane_address}"
+        detail_key = next(iter(progress.detail))
+        assert detail_key.startswith("worker-a::")
         assert progress.detail[detail_key] == "PROGRESS"
 
         await master.report_result(
@@ -147,7 +148,7 @@ def test_assignment_progress_and_reassign():
                 worker_id="worker-a",
                 success=False,
                 message="transfer failed",
-                data_plane_address=assignment.data_plane_address,
+                data_plane_address=None,
             )
         )
 

@@ -81,7 +81,6 @@ def build_assignment_handler(
                 worker_id=config.worker_id,
                 success=False,
                 message=str(exc),
-                data_plane_address=assignment.data_plane_address,
             )
         finally:
             status_tracker.status = WorkerStatus.IDLE
@@ -91,7 +90,6 @@ def build_assignment_handler(
             worker_id=config.worker_id,
             success=True,
             message="Transfer completed",
-            data_plane_address=assignment.data_plane_address,
         )
 
     return assignment_handler
