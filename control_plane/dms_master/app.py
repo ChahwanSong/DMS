@@ -80,7 +80,10 @@ async def reassign_request(
     payload: ReassignRequest,
     master: DMSMaster = Depends(master_dependency),
 ) -> dict:
-    await master.reassign_request(request_id, payload.worker_id)
+    try:
+        await master.reassign_request(request_id, payload.worker_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "requeued", "request_id": request_id, "worker_id": payload.worker_id}
 
 
