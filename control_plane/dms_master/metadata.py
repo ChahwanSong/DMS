@@ -112,8 +112,10 @@ class RedisMetadataStore:
 
     @staticmethod
     def _dump(model) -> str:
-        if hasattr(model, "dict"):
-            payload = model.dict()
+        if hasattr(model, "model_dump"):
+            payload = model.model_dump()
+        elif isinstance(model, dict):
+            payload = model
         else:
-            raise TypeError("Model does not support dict() serialization")
+            raise TypeError("Model does not support model_dump() serialization")
         return json.dumps(payload, default=str)

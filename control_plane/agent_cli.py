@@ -57,7 +57,7 @@ def build_heartbeat_factory(
 async def _default_transfer_runner(assignment: Assignment) -> None:
     """Placeholder hook for integrating the C++ data plane."""
 
-    logging.info("Received assignment payload: %s", assignment.dict())
+    logging.info("Received assignment payload: %s", assignment.model_dump())
 
 
 def build_assignment_handler(
@@ -123,7 +123,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    config = load_agent_config(args.config, args.worker_id)
+    try:
+        config = load_agent_config(args.config, args.worker_id)
+    except (FileNotFoundError, ValueError, KeyError) as exc:
+        logging.error("Failed to load agent configuration: %s", exc)
+        raise SystemExit(1)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     status_tracker = AgentStatusTracker()
     heartbeat_factory = build_heartbeat_factory(

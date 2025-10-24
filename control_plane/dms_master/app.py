@@ -18,7 +18,7 @@ from .models import (
     SyncResult,
     WorkerHeartbeat,
 )
-from .server import DMSMaster
+from .server import DMSMaster, RequestAlreadyExistsError
 
 
 @lru_cache(maxsize=1)
@@ -54,7 +54,10 @@ app = FastAPI(title="DMS Master", version="0.1.0", lifespan=lifespan)
 async def submit_sync(
     request: SyncRequest, master: DMSMaster = Depends(master_dependency)
 ) -> dict:
-    await master.submit_request(request)
+    try:
+        await master.submit_request(request)
+    except RequestAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"status": "queued", "request_id": request.request_id}
 
 

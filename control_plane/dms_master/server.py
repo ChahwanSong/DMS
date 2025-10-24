@@ -23,6 +23,10 @@ from .scheduler import round_robin  # noqa: F401 ensure registration
 from .metadata import MetadataStore, RedisMetadataStore
 
 
+class RequestAlreadyExistsError(ValueError):
+    """Raised when a sync request with the same ID has already been queued."""
+
+
 @dataclass
 class RequestState:
     request: SyncRequest
@@ -100,7 +104,9 @@ class DMSMaster:
     async def submit_request(self, request: SyncRequest) -> None:
         async with self._lock:
             if request.request_id in self._requests:
-                raise ValueError(f"Request {request.request_id} already exists")
+                message = f"Request {request.request_id} already exists"
+                self.logger.warning(message)
+                raise RequestAlreadyExistsError(message)
             pending_files = deque(request.file_list or [request.source_path])
             progress = SyncProgress(
                 request_id=request.request_id,
