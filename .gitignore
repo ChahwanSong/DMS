@@ -7,3 +7,7 @@ envs/
 .env/
 **/venv/
 **/.venv/
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+*$py.class
