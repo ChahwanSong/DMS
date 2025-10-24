@@ -32,12 +32,6 @@ class RequestState:
     preferred_worker: Optional[str] = None
 
 
-def _endpoint_key(worker_id: str, address: Optional[str]) -> str:
-    if address:
-        return f"{worker_id}::{address}"
-    return worker_id
-
-
 def _path_in_mount(path: str, mount: str) -> bool:
     """Return True if *path* is contained within *mount*."""
 
@@ -89,7 +83,7 @@ class DMSMaster:
 
         self.logger.error("Request %s failed: %s", state.request.request_id, message)
         state.progress.state = "FAILED"
-        state.progress.detail[_endpoint_key("master", None)] = message
+        state.progress.detail["master"] = message
         state.pending_files.clear()
         state.active_assignments.clear()
 
@@ -129,10 +123,10 @@ class DMSMaster:
 
     async def _schedule_work(self) -> None:
         async with self._lock:
-            busy_endpoints = {
-                key
+            busy_workers = {
+                worker_id
                 for state in self._requests.values()
-                for key in state.active_assignments.keys()
+                for worker_id in state.active_assignments.keys()
             }
             for state in self._requests.values():
                 if not state.pending_files:
@@ -171,31 +165,35 @@ class DMSMaster:
                 if not candidate_workers:
                     continue
 
-                available_endpoints: List[WorkerInterface] = []
+                available_workers: List[WorkerInterface] = []
                 for worker_id, heartbeat in self._worker_status.items():
                     if worker_id not in candidate_workers:
                         continue
                     if heartbeat.status == WorkerStatus.ERROR:
                         continue
-                    for endpoint in heartbeat.data_plane_endpoints:
-                        interface = WorkerInterface(
-                            worker_id=worker_id,
-                            address=endpoint.address,
-                        )
-                        if interface.key in busy_endpoints:
-                            continue
-                        available_endpoints.append(interface)
-                if not available_endpoints:
+                    preferred_address: str | None = None
+                    if heartbeat.data_plane_endpoints:
+                        preferred_address = heartbeat.data_plane_endpoints[0].address
+                    elif heartbeat.control_plane_address:
+                        preferred_address = heartbeat.control_plane_address
+                    interface = WorkerInterface(
+                        worker_id=worker_id,
+                        address=preferred_address,
+                    )
+                    if interface.key in busy_workers:
+                        continue
+                    available_workers.append(interface)
+                if not available_workers:
                     continue
-                needed = min(len(available_endpoints), len(state.pending_files))
+                needed = min(len(available_workers), len(state.pending_files))
                 if needed <= 0:
                     continue
-                chosen = self.scheduler.select_workers(available_endpoints, needed)
+                chosen = self.scheduler.select_workers(available_workers, needed)
                 for interface in chosen:
                     if not state.pending_files:
                         break
-                    endpoint_id = interface.key
-                    if endpoint_id in state.active_assignments:
+                    worker_key = interface.key
+                    if worker_key in state.active_assignments:
                         continue
                     source_path = state.pending_files.popleft()
                     assignment = Assignment(
@@ -208,16 +206,24 @@ class DMSMaster:
                         source_worker_pool=source_pool,
                         destination_worker_pool=destination_pool,
                     )
-                    state.active_assignments[endpoint_id] = assignment
-                    busy_endpoints.add(endpoint_id)
+                    state.active_assignments[worker_key] = assignment
+                    busy_workers.add(worker_key)
                     await self._assignment_queue.put(assignment)
-                    self.logger.info(
-                        "Assigned %s to worker %s (%s) for request %s",
-                        source_path,
-                        interface.worker_id,
-                        interface.address,
-                        state.request.request_id,
-                    )
+                    if interface.address:
+                        self.logger.info(
+                            "Assigned %s to worker %s (%s) for request %s",
+                            source_path,
+                            interface.worker_id,
+                            interface.address,
+                            state.request.request_id,
+                        )
+                    else:
+                        self.logger.info(
+                            "Assigned %s to worker %s for request %s",
+                            source_path,
+                            interface.worker_id,
+                            state.request.request_id,
+                        )
 
     async def worker_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
         async with self._lock:
@@ -240,11 +246,7 @@ class DMSMaster:
                 state.progress.updated_at = datetime.utcnow()
                 if state.progress.state == "QUEUED":
                     state.progress.state = "PROGRESS"
-                detail_key = _endpoint_key(assignment.worker_id, None)
-                for key, active in state.active_assignments.items():
-                    if active is assignment:
-                        detail_key = key
-                        break
+                detail_key = assignment.worker_id
                 state.progress.detail[detail_key] = "PROGRESS"
                 progress_to_update = state.progress
         if progress_to_update:
@@ -297,7 +299,7 @@ class DMSMaster:
             state.preferred_worker = worker_id
             state.progress.state = "QUEUED"
             state.progress.updated_at = datetime.utcnow()
-            detail_key = _endpoint_key("master", None)
+            detail_key = "master"
             if detail_key in state.progress.detail and state.progress.detail[detail_key].startswith(
                 "No workers have access"
             ):
@@ -316,6 +318,8 @@ class DMSMaster:
             return results
 
     async def report_result(self, result: SyncResult) -> None:
+        progress_to_update: Optional[SyncProgress] = None
+        schedule_more = False
         async with self._lock:
             state = self._requests.get(result.request_id)
             if not state:
@@ -323,12 +327,7 @@ class DMSMaster:
                 return
             self._result_log[result.request_id].append(result)
             state.progress.updated_at = datetime.utcnow()
-            detail_key = _endpoint_key(result.worker_id, result.data_plane_address)
-            if result.data_plane_address is None:
-                for key, active in state.active_assignments.items():
-                    if active.worker_id == result.worker_id:
-                        detail_key = key
-                        break
+            detail_key = result.worker_id
             if result.success:
                 state.progress.detail[detail_key] = "COMPLETED"
             else:
@@ -341,21 +340,19 @@ class DMSMaster:
                     result.data_plane_address or "unknown-address",
                     result.message,
                 )
-            assignment_key = _endpoint_key(result.worker_id, result.data_plane_address)
-            if assignment_key not in state.active_assignments:
-                for key, active in state.active_assignments.items():
-                    if active.worker_id == result.worker_id:
-                        assignment_key = key
-                        break
-                else:
-                    assignment_key = result.worker_id
-            state.active_assignments.pop(assignment_key, None)
+            state.active_assignments.pop(result.worker_id, None)
             if not state.pending_files and not state.active_assignments:
                 if state.progress.state != "FAILED":
                     state.progress.state = "COMPLETED"
                 self.logger.info("Request %s completed", result.request_id)
-            await self.metadata.append_result(result)
-            await self.metadata.update_progress(state.progress)
+            else:
+                schedule_more = state.progress.state != "FAILED" and bool(state.pending_files)
+            progress_to_update = state.progress
+        await self.metadata.append_result(result)
+        if progress_to_update:
+            await self.metadata.update_progress(progress_to_update)
+        if schedule_more:
+            await self._schedule_work()
 
     async def query_progress(self, request_id: str) -> Optional[SyncProgress]:
         async with self._lock:

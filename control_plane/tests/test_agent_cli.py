@@ -14,6 +14,13 @@ from dms_agent.config import AgentConfig, AgentNetworkConfig
 from dms_master.models import Assignment, WorkerStatus
 
 
+@pytest.fixture(scope="module")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
 def _make_config() -> AgentConfig:
     network = AgentNetworkConfig(
         control_plane_address="10.0.0.10",

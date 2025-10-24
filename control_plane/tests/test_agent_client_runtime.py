@@ -10,6 +10,13 @@ from dms_agent import AgentCommunicationError, run_agent
 from dms_master.models import WorkerHeartbeat, WorkerStatus
 
 
+@pytest.fixture(scope="module")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
 class _FailingClient:
     """Minimal client stub that fails all HTTP interactions."""
 

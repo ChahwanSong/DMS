@@ -66,13 +66,8 @@ def test_submit_and_assignments():
             )
         )
         assignment1 = await master.next_assignment("worker-1", timeout=1.0)
-        assignment2 = await master.next_assignment("worker-1", timeout=1.0)
         assert assignment1 is not None
-        assert assignment2 is not None
-        assert {
-            assignment1.source_path,
-            assignment2.source_path,
-        } == {"/home/clusterA/foo/file1", "/home/clusterA/foo/file2"}
+        assert assignment1.source_path == "/home/clusterA/foo/file1"
         assert assignment1.source_worker_pool == ["worker-1"]
         assert assignment1.destination_worker_pool == ["worker-1"]
         await master.report_result(
@@ -84,6 +79,9 @@ def test_submit_and_assignments():
                 data_plane_address=None,
             )
         )
+        assignment2 = await master.next_assignment("worker-1", timeout=1.0)
+        assert assignment2 is not None
+        assert assignment2.source_path == "/home/clusterA/foo/file2"
         await master.report_result(
             SyncResult(
                 request_id="req-1",
@@ -96,10 +94,7 @@ def test_submit_and_assignments():
         progress = await master.query_progress("req-1")
         assert progress is not None
         assert progress.state == "COMPLETED"
-        assert set(progress.detail.keys()) == {
-            "worker-1::192.168.1.10",
-            "worker-1::192.168.1.11",
-        }
+        assert set(progress.detail.keys()) == {"worker-1"}
 
     asyncio.run(scenario())
 
@@ -139,7 +134,7 @@ def test_assignment_progress_and_reassign():
         assert progress is not None
         assert progress.state == "PROGRESS"
         detail_key = next(iter(progress.detail))
-        assert detail_key.startswith("worker-a::")
+        assert detail_key == "worker-a"
         assert progress.detail[detail_key] == "PROGRESS"
 
         await master.report_result(

@@ -8,14 +8,14 @@ from typing import Iterable, List
 
 @dataclass(frozen=True)
 class WorkerInterface:
-    """Identifies a worker's data-plane interface advertised to the master."""
+    """Identifies a worker the scheduler can assign work to."""
 
     worker_id: str
-    address: str
+    address: str | None = None
 
     @property
     def key(self) -> str:
-        return f"{self.worker_id}::{self.address}"
+        return self.worker_id
 
 
 class SchedulerPolicy(ABC):
