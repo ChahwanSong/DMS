@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import PurePosixPath
 from typing import Deque, Dict, List, Optional, Set
 
@@ -106,8 +106,8 @@ class DMSMaster:
                 request_id=request.request_id,
                 transferred_bytes=0,
                 total_bytes=0,
-                started_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                started_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 state="QUEUED",
             )
             state = RequestState(
@@ -243,7 +243,7 @@ class DMSMaster:
         async with self._lock:
             state = self._requests.get(assignment.request_id)
             if state:
-                state.progress.updated_at = datetime.utcnow()
+                state.progress.updated_at = datetime.now(UTC)
                 if state.progress.state == "QUEUED":
                     state.progress.state = "PROGRESS"
                 detail_key = assignment.worker_id
@@ -298,7 +298,7 @@ class DMSMaster:
 
             state.preferred_worker = worker_id
             state.progress.state = "QUEUED"
-            state.progress.updated_at = datetime.utcnow()
+            state.progress.updated_at = datetime.now(UTC)
             detail_key = "master"
             if detail_key in state.progress.detail and state.progress.detail[detail_key].startswith(
                 "No workers have access"
@@ -326,7 +326,7 @@ class DMSMaster:
                 self.logger.warning("Received result for unknown request %s", result.request_id)
                 return
             self._result_log[result.request_id].append(result)
-            state.progress.updated_at = datetime.utcnow()
+            state.progress.updated_at = datetime.now(UTC)
             detail_key = result.worker_id
             if result.success:
                 state.progress.detail[detail_key] = "COMPLETED"

@@ -38,7 +38,7 @@ class _FailingClient:
         self.closed = True
 
 
-@pytest.mark.asyncio
+@pytest.fixture(scope="module")
 async def test_run_agent_raises_communication_error_and_closes_client() -> None:
     heartbeat = WorkerHeartbeat(worker_id="worker-a", status=WorkerStatus.IDLE)
 

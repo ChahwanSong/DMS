@@ -52,7 +52,7 @@ def test_heartbeat_factory_tracks_status() -> None:
     assert hb2.status == WorkerStatus.TRANSFERRING
 
 
-@pytest.mark.asyncio
+@pytest.fixture(scope="module")
 async def test_assignment_handler_success() -> None:
     config = _make_config()
     tracker = agent_cli.AgentStatusTracker()
@@ -75,7 +75,7 @@ async def test_assignment_handler_success() -> None:
     assert tracker.status == WorkerStatus.IDLE
 
 
-@pytest.mark.asyncio
+@pytest.fixture(scope="module")
 async def test_assignment_handler_failure() -> None:
     config = _make_config()
     tracker = agent_cli.AgentStatusTracker()
@@ -99,7 +99,7 @@ async def test_assignment_handler_failure() -> None:
     assert tracker.status == WorkerStatus.IDLE
 
 
-@pytest.mark.asyncio
+@pytest.fixture(scope="module")
 async def test_run_exits_with_message_on_communication_error(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

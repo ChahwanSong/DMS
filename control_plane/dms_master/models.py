@@ -1,7 +1,8 @@
 """Shared Pydantic models used by the control plane."""
+
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,7 +16,9 @@ except ModuleNotFoundError:  # pragma: no cover - minimal fallback for test envi
     class _FieldInfo:
         __slots__ = ("default", "default_factory")
 
-        def __init__(self, default: Any = _UNSET, default_factory=None, **_: Any) -> None:
+        def __init__(
+            self, default: Any = _UNSET, default_factory=None, **_: Any
+        ) -> None:
             self.default = default
             self.default_factory = default_factory
 
@@ -55,6 +58,8 @@ except ModuleNotFoundError:  # pragma: no cover - minimal fallback for test envi
         @classmethod
         def parse_obj(cls, obj: Dict[str, Any]) -> "BaseModel":
             return cls(**obj)
+
+
 class SyncRequest(BaseModel):
     request_id: str = Field(..., description="Unique identifier for the sync request")
     source_path: str
@@ -99,7 +104,7 @@ class DataPlaneEndpoint(BaseModel):
 class WorkerHeartbeat(BaseModel):
     worker_id: str
     status: WorkerStatus
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     control_plane_address: Optional[str] = None
     data_plane_endpoints: List[DataPlaneEndpoint] = Field(default_factory=list)
     storage_paths: List[str] = Field(
@@ -146,7 +151,7 @@ class SyncResult(BaseModel):
     worker_id: str
     success: bool
     message: str = ""
-    completed_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     data_plane_address: Optional[str] = None
 
 
