@@ -1,4 +1,5 @@
 """Async worker agent client interacting with the master."""
+
 from __future__ import annotations
 
 import asyncio
@@ -54,7 +55,9 @@ class AgentClient:
         await self._client.post(f"{self.master_url}/workers/heartbeat", json=payload)
 
     async def poll_assignment(self, interval: float = 1.0) -> Optional[Assignment]:
-        response = await self._client.post(f"{self.master_url}/workers/{self.worker_id}/assignment")
+        response = await self._client.post(
+            f"{self.master_url}/workers/{self.worker_id}/assignment"
+        )
         if response.status_code == 200 and response.json() is not None:
             return Assignment.parse_obj(response.json())
         await asyncio.sleep(interval)
