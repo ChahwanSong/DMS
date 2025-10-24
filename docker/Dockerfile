@@ -10,8 +10,6 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-
-
 # Update and install common runtime/build tools for typical DMS workloads
 RUN set -eux; \
     apt-get update; \
@@ -56,11 +54,10 @@ RUN set -eux; \
     locale-gen en_US.UTF-8 || true; \
     update-ca-certificates
     
+WORKDIR /workspace
+
 # Run redis background service
 RUN redis-server --daemonize yes
-  
-WORKDIR /workspace
-USER ${USERNAME}
 
 CMD ["sleep", "infinity"]
 
