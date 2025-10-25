@@ -62,8 +62,8 @@ curl -X POST http://127.0.0.1:8888/sync \
   -H 'Content-Type: application/json' \
 -d '{
         "request_id": "demo-1",
-        "source_path": "/data/source",
-        "destination_path": "/data/dest",
+        "source_path": "/home/cpu1",
+        "destination_path": "/home/gpu1",
         "chunk_size_mb": 64
       }'
 ```
