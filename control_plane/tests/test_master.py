@@ -211,6 +211,99 @@ def test_assignment_respects_storage_paths():
     asyncio.run(scenario())
 
 
+def test_inactive_workers_are_reassigned_and_excluded():
+    async def scenario():
+        timeout = 0.05
+        store = DummyMetadataStore()
+        master = DMSMaster(
+            MasterConfig(worker_heartbeat_timeout=timeout), metadata_store=store
+        )
+        request = SyncRequest(
+            request_id="req-timeout",
+            source_path="/data/source",
+            destination_path="/data/dest",
+            file_list=["/data/source/file1"],
+        )
+        await master.submit_request(request)
+
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-stale",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.10")],
+            )
+        )
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-active",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.11")],
+            )
+        )
+
+        first_assignment = await master.next_assignment("worker-stale", timeout=1.0)
+        assert first_assignment is not None
+
+        await asyncio.sleep(timeout + 0.05)
+
+        # Active worker heartbeat triggers reassignment away from the stale worker.
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-active",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.11")],
+            )
+        )
+
+        reassigned = await master.next_assignment("worker-active", timeout=1.0)
+        assert reassigned is not None
+        assert reassigned.source_path == first_assignment.source_path
+        assert reassigned.worker_id == "worker-active"
+        assert await master.next_assignment("worker-stale", timeout=0.1) is None
+
+        progress = await master.query_progress("req-timeout")
+        assert progress is not None
+        assert progress.detail.get("worker-stale") == "REASSIGNED"
+        assert store.requests["req-timeout"].detail.get("worker-stale") == "REASSIGNED"
+
+        await master.report_result(
+            SyncResult(
+                request_id="req-timeout",
+                worker_id="worker-active",
+                success=True,
+                message="complete",
+                data_plane_address=None,
+            )
+        )
+
+        new_request = SyncRequest(
+            request_id="req-timeout-new",
+            source_path="/data/source",
+            destination_path="/data/dest",
+            file_list=["/data/source/file2"],
+        )
+        await master.submit_request(new_request)
+
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-active",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data", "/data/source", "/data/dest"],
+                data_plane_endpoints=[DataPlaneEndpoint(address="10.0.0.11")],
+            )
+        )
+
+        next_for_active = await master.next_assignment("worker-active", timeout=1.0)
+        assert next_for_active is not None
+        assert next_for_active.worker_id == "worker-active"
+        assert await master.next_assignment("worker-stale", timeout=0.1) is None
+
+    asyncio.run(scenario())
+
+
 def test_sync_request_requires_absolute_paths():
     with pytest.raises(ValidationError) as excinfo:
         SyncRequest(
