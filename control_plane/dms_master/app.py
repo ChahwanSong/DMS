@@ -21,10 +21,39 @@ from .models import (
 from .server import DMSMaster, RequestAlreadyExistsError
 
 
+_LAST_CONFIG_PATH: Optional[str] = None
+
+
+def _resolve_config_path(config_path: Optional[str]) -> Optional[str]:
+    """Return the effective configuration path, remembering the most recent value."""
+
+    global _LAST_CONFIG_PATH
+    if config_path is not None:
+        _LAST_CONFIG_PATH = config_path
+        return config_path
+    return _LAST_CONFIG_PATH
+
+
 @lru_cache(maxsize=1)
-def get_master(config_path: Optional[str] = None) -> DMSMaster:
-    config: MasterConfig = load_config(config_path)
+def _get_master_cached(effective_path: Optional[str]) -> DMSMaster:
+    config: MasterConfig = load_config(effective_path)
     return DMSMaster(config)
+
+
+def get_master(config_path: Optional[str] = None) -> DMSMaster:
+    effective_path = _resolve_config_path(config_path)
+    return _get_master_cached(effective_path)
+
+
+def _cache_clear() -> None:
+    global _LAST_CONFIG_PATH
+    _LAST_CONFIG_PATH = None
+    _get_master_cached.cache_clear()
+
+
+# Expose cache control helpers to maintain the existing API that tests and the CLI rely on.
+get_master.cache_clear = _cache_clear  # type: ignore[attr-defined]
+get_master.cache_info = _get_master_cached.cache_info  # type: ignore[attr-defined]
 
 
 def master_dependency() -> DMSMaster:
