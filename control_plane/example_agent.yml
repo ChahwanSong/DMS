@@ -8,13 +8,13 @@ workers:
       control_plane_address: 192.168.65.4
       data_plane_endpoints:
         - 192.168.65.4
-        - 10.10.0.4
+        - 192.168.65.5
   - worker_id: worker-b
     storage_paths:
       - /home/gpu1
       - /scratch
     network:
-      control_plane_address: 192.168.65.5
+      control_plane_address: 192.168.65.4
       data_plane_endpoints:
+        - 192.168.65.4
         - 192.168.65.5
-        - 10.10.0.5
