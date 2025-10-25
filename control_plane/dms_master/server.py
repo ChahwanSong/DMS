@@ -53,6 +53,7 @@ class DMSMaster:
         self.scheduler: SchedulerPolicy = scheduler_registry.create(config.scheduler)
         self._requests: Dict[str, RequestState] = {}
         self._worker_status: Dict[str, WorkerHeartbeat] = {}
+        self._inactive_workers: Set[str] = set()
         self._result_log: Dict[str, List[SyncResult]] = defaultdict(list)
         self._assignment_queue: asyncio.Queue[Assignment] = asyncio.Queue()
         self._lock = asyncio.Lock()
@@ -60,11 +61,16 @@ class DMSMaster:
             raise ValueError("Redis configuration must be provided for the master server")
         self.metadata: MetadataStore = metadata_store or RedisMetadataStore.from_config(config.redis)
 
-    def _worker_pool_for_path(self, path: str) -> List[str]:
+    def _worker_pool_for_path(
+        self,
+        path: str,
+        workers: Dict[str, WorkerHeartbeat] | None = None,
+    ) -> List[str]:
         """Return worker IDs that can access the provided path."""
 
+        status_source = workers if workers is not None else self._worker_status
         pool: list[str] = []
-        for worker_id, heartbeat in self._worker_status.items():
+        for worker_id, heartbeat in status_source.items():
             mounts = getattr(heartbeat, "storage_paths", []) or []
             for mount in mounts:
                 if _path_in_mount(path, mount):
@@ -78,6 +84,71 @@ class DMSMaster:
                 ordered_pool.append(worker_id)
                 seen.add(worker_id)
         return ordered_pool
+
+    def _partition_workers(
+        self, now: datetime | None = None
+    ) -> tuple[Dict[str, WorkerHeartbeat], Dict[str, WorkerHeartbeat]]:
+        """Split workers into active and inactive buckets."""
+
+        if now is None:
+            now = datetime.now(UTC)
+        active: Dict[str, WorkerHeartbeat] = {}
+        inactive: Dict[str, WorkerHeartbeat] = {}
+        for worker_id, heartbeat in self._worker_status.items():
+            if (now - heartbeat.timestamp).total_seconds() <= self.config.worker_heartbeat_timeout:
+                active[worker_id] = heartbeat
+            else:
+                inactive[worker_id] = heartbeat
+        return active, inactive
+
+    async def _handle_inactive_workers(self, inactive_ids: Set[str]) -> List[SyncProgress]:
+        """Requeue work assigned to inactive workers and return updated progresses."""
+
+        if not inactive_ids:
+            return []
+
+        reassigned_paths: dict[str, list[str]] = defaultdict(list)
+        retained_assignments: list[Assignment] = []
+        while True:
+            try:
+                queued = self._assignment_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if queued.worker_id in inactive_ids:
+                reassigned_paths[queued.request_id].append(queued.source_path)
+            else:
+                retained_assignments.append(queued)
+        for assignment in retained_assignments:
+            await self._assignment_queue.put(assignment)
+
+        now = datetime.now(UTC)
+        progress_updates: list[SyncProgress] = []
+        for state in self._requests.values():
+            request_id = state.request.request_id
+            paths = reassigned_paths.get(request_id, [])
+            if state.preferred_worker in inactive_ids:
+                state.preferred_worker = None
+            removed_keys: list[str] = []
+            for worker_key, assignment in list(state.active_assignments.items()):
+                if assignment.worker_id not in inactive_ids:
+                    continue
+                if assignment.source_path not in paths:
+                    paths.append(assignment.source_path)
+                removed_keys.append(worker_key)
+                current_detail = state.progress.detail.get(assignment.worker_id)
+                if current_detail in (None, "PROGRESS"):
+                    state.progress.detail[assignment.worker_id] = "REASSIGNED"
+            for worker_key in removed_keys:
+                state.active_assignments.pop(worker_key, None)
+            if not paths:
+                continue
+            for path in reversed(paths):
+                state.pending_files.appendleft(path)
+            if state.progress.state != "FAILED" and not state.active_assignments:
+                state.progress.state = "QUEUED"
+            state.progress.updated_at = now
+            progress_updates.append(state.progress)
+        return progress_updates
 
     async def _fail_request(self, state: RequestState, message: str) -> None:
         """Transition *state* to FAILED and persist the provided *message*."""
@@ -128,7 +199,25 @@ class DMSMaster:
         await self._schedule_work()
 
     async def _schedule_work(self) -> None:
+        progress_updates: list[SyncProgress] = []
         async with self._lock:
+            now = datetime.now(UTC)
+            active_workers, inactive_workers = self._partition_workers(now)
+            for worker_id in active_workers:
+                self._inactive_workers.discard(worker_id)
+            newly_inactive = set(inactive_workers.keys()) - self._inactive_workers
+            for worker_id in newly_inactive:
+                self.logger.warning(
+                    "Worker %s marked inactive after %.1fs without heartbeat",
+                    worker_id,
+                    self.config.worker_heartbeat_timeout,
+                )
+            self._inactive_workers.update(inactive_workers.keys())
+            self._inactive_workers.intersection_update(self._worker_status.keys())
+            if inactive_workers:
+                progress_updates.extend(
+                    await self._handle_inactive_workers(set(inactive_workers.keys()))
+                )
             busy_workers = {
                 worker_id
                 for state in self._requests.values()
@@ -137,12 +226,14 @@ class DMSMaster:
             for state in self._requests.values():
                 if not state.pending_files:
                     continue
-                source_pool = self._worker_pool_for_path(state.request.source_path)
+                source_pool = self._worker_pool_for_path(
+                    state.request.source_path, active_workers
+                )
                 destination_pool = self._worker_pool_for_path(
-                    state.request.destination_path
+                    state.request.destination_path, active_workers
                 )
                 if not source_pool:
-                    if self._worker_status:
+                    if active_workers:
                         await self._fail_request(
                             state,
                             "No workers have access to source path "
@@ -150,7 +241,7 @@ class DMSMaster:
                         )
                     continue
                 if not destination_pool:
-                    if self._worker_status:
+                    if active_workers:
                         await self._fail_request(
                             state,
                             "No workers have access to destination path "
@@ -172,7 +263,7 @@ class DMSMaster:
                     continue
 
                 available_workers: List[WorkerInterface] = []
-                for worker_id, heartbeat in self._worker_status.items():
+                for worker_id, heartbeat in active_workers.items():
                     if worker_id not in candidate_workers:
                         continue
                     if heartbeat.status == WorkerStatus.ERROR:
@@ -230,10 +321,13 @@ class DMSMaster:
                             interface.worker_id,
                             state.request.request_id,
                         )
+        for progress in progress_updates:
+            await self.metadata.update_progress(progress)
 
     async def worker_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
         async with self._lock:
             self._worker_status[heartbeat.worker_id] = heartbeat
+            self._inactive_workers.discard(heartbeat.worker_id)
         await self.metadata.record_worker(heartbeat)
         await self._schedule_work()
 
@@ -282,9 +376,14 @@ class DMSMaster:
                 raise ValueError(
                     "Reassignment is only supported for requests in QUEUED or FAILED state"
                 )
-            if worker_id not in self._worker_status:
+            active_workers, _ = self._partition_workers()
+            if worker_id not in active_workers:
+                if worker_id in self._worker_status:
+                    raise ValueError(f"Worker {worker_id} is currently inactive")
                 raise ValueError(f"Worker {worker_id} is not registered with the master")
-            source_pool = self._worker_pool_for_path(state.request.source_path)
+            source_pool = self._worker_pool_for_path(
+                state.request.source_path, active_workers
+            )
             if worker_id not in source_pool:
                 raise ValueError(
                     f"Worker {worker_id} does not have access to {state.request.source_path}"
