@@ -7,7 +7,21 @@ envs/
 .env/
 **/venv/
 **/.venv/
+
 # Ignore compiled Python files
 __pycache__/
+control_plane/**/__pycache__/
 *.py[cod]
+*.cpy
 *$py.class
+
+# Ignore test binary
+docker/hello_mpi
+
+# Ignore .pyc files
+control_plane/dms_agent/__pycache__
+control_plane/dms_master/__pycache__
+
+# Ignore redis database files
+*.rdb
+
