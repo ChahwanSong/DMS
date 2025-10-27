@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -22,29 +23,32 @@ from .server import DMSMaster, RequestAlreadyExistsError
 
 _MASTER_INSTANCE: DMSMaster | None = None
 _MASTER_CONFIG_PATH: Optional[str] = None
+_MASTER_LOCK = threading.Lock()
 
 
 def get_master(config_path: Optional[str] = None) -> DMSMaster:
     global _MASTER_INSTANCE, _MASTER_CONFIG_PATH
 
-    if _MASTER_INSTANCE is None:
-        config: MasterConfig = load_config(config_path)
-        _MASTER_INSTANCE = DMSMaster(config)
-        _MASTER_CONFIG_PATH = config_path
+    with _MASTER_LOCK:
+        if _MASTER_INSTANCE is None:
+            config: MasterConfig = load_config(config_path)
+            _MASTER_INSTANCE = DMSMaster(config)
+            _MASTER_CONFIG_PATH = config_path
+            return _MASTER_INSTANCE
+
+        if config_path is not None and config_path != _MASTER_CONFIG_PATH:
+            config = load_config(config_path)
+            _MASTER_INSTANCE = DMSMaster(config)
+            _MASTER_CONFIG_PATH = config_path
+
         return _MASTER_INSTANCE
-
-    if config_path is not None and config_path != _MASTER_CONFIG_PATH:
-        config = load_config(config_path)
-        _MASTER_INSTANCE = DMSMaster(config)
-        _MASTER_CONFIG_PATH = config_path
-
-    return _MASTER_INSTANCE
 
 
 def reset_master_cache() -> None:
     global _MASTER_INSTANCE, _MASTER_CONFIG_PATH
-    _MASTER_INSTANCE = None
-    _MASTER_CONFIG_PATH = None
+    with _MASTER_LOCK:
+        _MASTER_INSTANCE = None
+        _MASTER_CONFIG_PATH = None
 
 
 def master_dependency() -> DMSMaster:
