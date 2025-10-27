@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -21,10 +21,34 @@ from .models import (
 from .server import DMSMaster, RequestAlreadyExistsError
 
 
-@lru_cache(maxsize=1)
+_MASTER_INSTANCE: DMSMaster | None = None
+_MASTER_CONFIG_PATH: Optional[str] = None
+_MASTER_LOCK = threading.Lock()
+
+
 def get_master(config_path: Optional[str] = None) -> DMSMaster:
-    config: MasterConfig = load_config(config_path)
-    return DMSMaster(config)
+    global _MASTER_INSTANCE, _MASTER_CONFIG_PATH
+
+    with _MASTER_LOCK:
+        if _MASTER_INSTANCE is None:
+            config: MasterConfig = load_config(config_path)
+            _MASTER_INSTANCE = DMSMaster(config)
+            _MASTER_CONFIG_PATH = config_path
+            return _MASTER_INSTANCE
+
+        if config_path is not None and config_path != _MASTER_CONFIG_PATH:
+            config = load_config(config_path)
+            _MASTER_INSTANCE = DMSMaster(config)
+            _MASTER_CONFIG_PATH = config_path
+
+        return _MASTER_INSTANCE
+
+
+def reset_master_cache() -> None:
+    global _MASTER_INSTANCE, _MASTER_CONFIG_PATH
+    with _MASTER_LOCK:
+        _MASTER_INSTANCE = None
+        _MASTER_CONFIG_PATH = None
 
 
 def master_dependency() -> DMSMaster:
@@ -44,7 +68,7 @@ async def lifespan(app: FastAPI):
         # Example:
         # master = get_master()
         # await master.metadata.close()
-        get_master.cache_clear()
+        reset_master_cache()
 
 
 app = FastAPI(title="DMS Master", version="0.1.0", lifespan=lifespan)

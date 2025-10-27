@@ -9,7 +9,7 @@ from typing import Awaitable, Iterable, Sequence
 
 import uvicorn
 
-from dms_master.app import app, get_master
+from dms_master.app import app, get_master, reset_master_cache
 from dms_master.server import DMSMaster
 
 
@@ -92,7 +92,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Preload master with configuration.
-    get_master.cache_clear()  # type: ignore[attr-defined]
+    reset_master_cache()
     try:
         master = get_master(args.config)
     except Exception as exc:
