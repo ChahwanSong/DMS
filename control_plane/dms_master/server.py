@@ -155,7 +155,7 @@ class DMSMaster:
         """Return the current active and inactive worker sets."""
 
         async with self._lock:
-            active, inactive = self._partition_workers()
+            active, inactive, _ = self._refresh_worker_activity()
             active_list = sorted(active.values(), key=lambda heartbeat: heartbeat.worker_id)
             inactive_list = sorted(inactive.values(), key=lambda heartbeat: heartbeat.worker_id)
         return WorkerInventory(active=active_list, inactive=inactive_list)
@@ -208,22 +208,30 @@ class DMSMaster:
             await self.metadata.store_request(progress)
         await self._schedule_work()
 
+    def _refresh_worker_activity(
+        self, now: datetime | None = None
+    ) -> tuple[Dict[str, WorkerHeartbeat], Dict[str, WorkerHeartbeat], Set[str]]:
+        """Return active and inactive workers while logging new transitions."""
+
+        active_workers, inactive_workers = self._partition_workers(now)
+        for worker_id in active_workers:
+            self._inactive_workers.discard(worker_id)
+        newly_inactive = set(inactive_workers.keys()) - self._inactive_workers
+        for worker_id in newly_inactive:
+            self.logger.warning(
+                "Worker %s marked inactive after %.1fs without heartbeat",
+                worker_id,
+                self.config.worker_heartbeat_timeout,
+            )
+        self._inactive_workers.update(inactive_workers.keys())
+        self._inactive_workers.intersection_update(self._worker_status.keys())
+        return active_workers, inactive_workers, newly_inactive
+
     async def _schedule_work(self) -> None:
         progress_updates: list[SyncProgress] = []
         async with self._lock:
             now = datetime.now(UTC)
-            active_workers, inactive_workers = self._partition_workers(now)
-            for worker_id in active_workers:
-                self._inactive_workers.discard(worker_id)
-            newly_inactive = set(inactive_workers.keys()) - self._inactive_workers
-            for worker_id in newly_inactive:
-                self.logger.warning(
-                    "Worker %s marked inactive after %.1fs without heartbeat",
-                    worker_id,
-                    self.config.worker_heartbeat_timeout,
-                )
-            self._inactive_workers.update(inactive_workers.keys())
-            self._inactive_workers.intersection_update(self._worker_status.keys())
+            active_workers, inactive_workers, _ = self._refresh_worker_activity(now)
             if inactive_workers:
                 progress_updates.extend(
                     await self._handle_inactive_workers(set(inactive_workers.keys()))
