@@ -1,8 +1,12 @@
 from __future__ import annotations
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from dms_master.app import app, master_dependency
 from dms_master.config import MasterConfig
+from dms_master.models import WorkerHeartbeat, WorkerStatus
 from dms_master.server import DMSMaster
 
 
@@ -71,5 +75,63 @@ def test_submit_request_still_succeeds_without_duplicate():
             response = client.post("/sync", json=payload)
             assert response.status_code == 202
             assert response.json() == {"status": "queued", "request_id": "demo-unique"}
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_workers_endpoint_supports_status_filtering():
+    master = DMSMaster(
+        MasterConfig(worker_heartbeat_timeout=0.1), metadata_store=DummyMetadataStore()
+    )
+
+    def override_master_dependency() -> DMSMaster:
+        return master
+
+    app.dependency_overrides[master_dependency] = override_master_dependency
+
+    async def seed_workers():
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-active",
+                status=WorkerStatus.IDLE,
+                storage_paths=["/data"],
+            )
+        )
+        await master.worker_heartbeat(
+            WorkerHeartbeat(
+                worker_id="worker-inactive",
+                status=WorkerStatus.IDLE,
+                timestamp=datetime.now(UTC) - timedelta(seconds=5),
+                storage_paths=["/data"],
+            )
+        )
+
+    asyncio.run(seed_workers())
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/workers")
+            assert response.status_code == 200
+            payload = response.json()
+            assert [worker["worker_id"] for worker in payload["active"]] == [
+                "worker-active"
+            ]
+            assert [worker["worker_id"] for worker in payload["inactive"]] == [
+                "worker-inactive"
+            ]
+
+            active_only = client.get("/workers", params={"status": "active"})
+            assert active_only.status_code == 200
+            assert [
+                worker["worker_id"] for worker in active_only.json()["active"]
+            ] == ["worker-active"]
+            assert not active_only.json()["inactive"]
+
+            inactive_only = client.get("/workers", params={"status": "inactive"})
+            assert inactive_only.status_code == 200
+            assert [
+                worker["worker_id"] for worker in inactive_only.json()["inactive"]
+            ] == ["worker-inactive"]
+            assert not inactive_only.json()["active"]
     finally:
         app.dependency_overrides.clear()

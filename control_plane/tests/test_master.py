@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -300,6 +301,50 @@ def test_inactive_workers_are_reassigned_and_excluded():
         assert next_for_active is not None
         assert next_for_active.worker_id == "worker-active"
         assert await master.next_assignment("worker-stale", timeout=0.1) is None
+
+    asyncio.run(scenario())
+
+
+def test_worker_status_inventory_and_logging(caplog):
+    async def scenario():
+        store = DummyMetadataStore()
+        master = DMSMaster(
+            MasterConfig(worker_heartbeat_timeout=0.1), metadata_store=store
+        )
+        stale_timestamp = datetime.now(UTC) - timedelta(seconds=5)
+
+        with caplog.at_level("WARNING"):
+            await master.worker_heartbeat(
+                WorkerHeartbeat(
+                    worker_id="worker-log",
+                    status=WorkerStatus.IDLE,
+                    timestamp=stale_timestamp,
+                    storage_paths=["/data"],
+                )
+            )
+
+        inventory = await master.list_workers()
+        assert not inventory.active
+        assert [worker.worker_id for worker in inventory.inactive] == ["worker-log"]
+        assert any("marked inactive" in record.message for record in caplog.records)
+
+        caplog.clear()
+
+        with caplog.at_level("INFO"):
+            await master.worker_heartbeat(
+                WorkerHeartbeat(
+                    worker_id="worker-log",
+                    status=WorkerStatus.IDLE,
+                    storage_paths=["/data"],
+                )
+            )
+
+        refreshed_inventory = await master.list_workers()
+        assert [worker.worker_id for worker in refreshed_inventory.active] == [
+            "worker-log"
+        ]
+        assert not refreshed_inventory.inactive
+        assert any("marked active" in record.message for record in caplog.records)
 
     asyncio.run(scenario())
 

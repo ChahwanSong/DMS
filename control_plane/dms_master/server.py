@@ -16,6 +16,7 @@ from .models import (
     SyncRequest,
     SyncResult,
     WorkerHeartbeat,
+    WorkerInventory,
     WorkerStatus,
 )
 from .scheduler.base import SchedulerPolicy, WorkerInterface, registry as scheduler_registry
@@ -149,6 +150,15 @@ class DMSMaster:
             state.progress.updated_at = now
             progress_updates.append(state.progress)
         return progress_updates
+
+    async def list_workers(self) -> WorkerInventory:
+        """Return the current active and inactive worker sets."""
+
+        async with self._lock:
+            active, inactive = self._partition_workers()
+            active_list = sorted(active.values(), key=lambda heartbeat: heartbeat.worker_id)
+            inactive_list = sorted(inactive.values(), key=lambda heartbeat: heartbeat.worker_id)
+        return WorkerInventory(active=active_list, inactive=inactive_list)
 
     async def _fail_request(self, state: RequestState, message: str) -> None:
         """Transition *state* to FAILED and persist the provided *message*."""
@@ -326,7 +336,13 @@ class DMSMaster:
 
     async def worker_heartbeat(self, heartbeat: WorkerHeartbeat) -> None:
         async with self._lock:
+            was_inactive = heartbeat.worker_id in self._inactive_workers
             self._worker_status[heartbeat.worker_id] = heartbeat
+            if was_inactive:
+                self.logger.info(
+                    "Worker %s marked active after heartbeat",
+                    heartbeat.worker_id,
+                )
             self._inactive_workers.discard(heartbeat.worker_id)
         await self.metadata.record_worker(heartbeat)
         await self._schedule_work()

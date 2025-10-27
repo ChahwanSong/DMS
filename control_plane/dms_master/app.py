@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 
@@ -17,6 +17,7 @@ from .models import (
     SyncRequest,
     SyncResult,
     WorkerHeartbeat,
+    WorkerInventory,
 )
 from .server import DMSMaster, RequestAlreadyExistsError
 
@@ -108,6 +109,19 @@ async def worker_heartbeat(
 ) -> dict:
     await master.worker_heartbeat(heartbeat)
     return {"status": "ok"}
+
+
+@app.get("/workers", response_model=WorkerInventory)
+async def list_workers(
+    status: Literal["active", "inactive"] | None = None,
+    master: DMSMaster = Depends(master_dependency),
+) -> WorkerInventory:
+    inventory = await master.list_workers()
+    if status == "active":
+        return WorkerInventory(active=inventory.active, inactive=[])
+    if status == "inactive":
+        return WorkerInventory(active=[], inactive=inventory.inactive)
+    return inventory
 
 
 @app.post("/workers/{worker_id}/assignment", response_model=Optional[Assignment])
