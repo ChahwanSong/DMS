@@ -105,6 +105,11 @@ class WorkerHeartbeat(BaseModel):
     )
 
 
+class WorkerInventory(BaseModel):
+    active: List[WorkerHeartbeat] = Field(default_factory=list)
+    inactive: List[WorkerHeartbeat] = Field(default_factory=list)
+
+
 class SyncProgress(BaseModel):
     request_id: str
     transferred_bytes: int
