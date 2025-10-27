@@ -22,6 +22,8 @@ def _jsonable_payload(model: Any) -> Any:
             return value.value
         if hasattr(value, "model_dump"):
             return _convert(value.model_dump())
+        if hasattr(value, "dict"):
+            return _convert(value.dict())
         if isinstance(value, dict):
             return {key: _convert(inner) for key, inner in value.items()}
         if isinstance(value, (list, tuple)):

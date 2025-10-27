@@ -109,13 +109,20 @@ class RedisMetadataStore:
 
     async def health_check(self) -> None:
         await self._client.ping()
+        # When the health check is executed before the server event loop starts
+        # (e.g. during CLI startup validation) the Redis connection can be bound
+        # to that temporary loop. Closing the pool ensures the next use acquires
+        # a fresh connection associated with the current loop.
+        await self._client.connection_pool.disconnect(inuse_connections=True)
 
     @staticmethod
     def _dump(model) -> str:
         if hasattr(model, "model_dump"):
             payload = model.model_dump()
+        elif hasattr(model, "dict"):
+            payload = model.dict()
         elif isinstance(model, dict):
             payload = model
         else:
-            raise TypeError("Model does not support model_dump() serialization")
+            raise TypeError("Model does not support model_dump()/dict() serialization")
         return json.dumps(payload, default=str)
