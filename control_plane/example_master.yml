@@ -1,7 +1,0 @@
-scheduler: round_robin
-worker_heartbeat_timeout: 45.0
-redis:
-  host: localhost
-  port: 6379
-  db: 0
-  expiry_days: 60

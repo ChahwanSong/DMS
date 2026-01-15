@@ -1,2 +1,0 @@
-/usr/bin/ar qc libdms.a CMakeFiles/dms.dir/src/checksum.cpp.o CMakeFiles/dms.dir/src/file_chunker.cpp.o CMakeFiles/dms.dir/src/network.cpp.o CMakeFiles/dms.dir/src/transfer_manager.cpp.o
-/usr/bin/ranlib libdms.a
